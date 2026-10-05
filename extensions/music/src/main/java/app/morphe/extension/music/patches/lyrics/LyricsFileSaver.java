@@ -24,7 +24,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import app.morphe.extension.music.patches.lyrics.requests.LrcParser;
+import app.morphe.extension.music.patches.lyrics.requests.LRCParser;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.ResourceUtils;
 
@@ -161,7 +161,7 @@ public final class LyricsFileSaver {
         StringBuilder sb = new StringBuilder(50 * lines.size());
         for (LyricsLine line : lines) {
             sb.append('[')
-              .append(LrcParser.formatCentiseconds(line.startTimeMs()))
+              .append(LRCParser.formatCentiseconds(line.startTimeMs()))
               .append(']')
               .append(line.text())
               .append('\n');
@@ -219,7 +219,7 @@ public final class LyricsFileSaver {
             JSONObject obj = new JSONObject();
             try {
                 final long ms = line.startTimeMs();
-                obj.put("lrcTimestamp", "[" + LrcParser.formatCentiseconds(ms) + "]");
+                obj.put("lrcTimestamp", "[" + LRCParser.formatCentiseconds(ms) + "]");
                 obj.put("line", line.text());
                 obj.put("milliseconds", ms);
                 obj.put("duration", line.endTimeMs() - line.startTimeMs());

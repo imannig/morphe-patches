@@ -32,11 +32,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 import app.morphe.extension.music.patches.album.PlayAlbumSongsPatch;
 import app.morphe.extension.music.patches.album.PlaylistRequest;
-import app.morphe.extension.music.patches.lyrics.requests.AmllProvider;
+import app.morphe.extension.music.patches.lyrics.requests.AMlLProvider;
 import app.morphe.extension.music.patches.lyrics.requests.AppleMusicProvider;
 import app.morphe.extension.music.patches.lyrics.requests.BinimumProvider;
 import app.morphe.extension.music.patches.lyrics.requests.BlyricsProvider;
@@ -45,7 +46,7 @@ import app.morphe.extension.music.patches.lyrics.requests.CharactersConverter;
 import app.morphe.extension.music.patches.lyrics.requests.DeezerProvider;
 import app.morphe.extension.music.patches.lyrics.requests.KuGouProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LocalLyricsFetcher;
-import app.morphe.extension.music.patches.lyrics.requests.LrcLibProvider;
+import app.morphe.extension.music.patches.lyrics.requests.LRCLIBProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LunaBeatProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LunaProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LyricifyProvider;
@@ -58,7 +59,7 @@ import app.morphe.extension.music.patches.lyrics.requests.QQProvider;
 import app.morphe.extension.music.patches.lyrics.requests.SimpMusicProvider;
 import app.morphe.extension.music.patches.lyrics.requests.SpotifyProvider;
 import app.morphe.extension.music.patches.lyrics.requests.UnisonProvider;
-import app.morphe.extension.music.patches.lyrics.requests.YTMusicProvider;
+import app.morphe.extension.music.patches.lyrics.requests.YouTubeMusicProvider;
 import app.morphe.extension.music.settings.Settings;
 import app.morphe.extension.music.shared.VideoInformation;
 import app.morphe.extension.shared.Logger;
@@ -150,7 +151,7 @@ public final class LyricsManager {
      * Incremented for every track change so that a late response for a previous
      * track is discarded instead of being shown for the current one.
      */
-    private volatile int requestId;
+    private final AtomicInteger requestId = new AtomicInteger();
 
     private long positionMs;
     private long positionUpdatedAtUptimeMs;
@@ -260,7 +261,8 @@ public final class LyricsManager {
 
     /** Whether lyrics for the current track are loaded and ready to show. */
     public boolean hasLyrics() {
-        return state == State.LOADED && currentLyrics != null && !currentLyrics.isEmpty();
+        Lyrics lyrics = currentLyrics;
+        return state == State.LOADED && lyrics != null && !lyrics.isEmpty();
     }
 
     /** Whether the lyrics are usable (non-null, non-empty and not instrumental). */
@@ -359,7 +361,7 @@ public final class LyricsManager {
         // An album track playing its song version is still described by the app as the music
         // video, whose title and duration find no lyrics or the lyrics of another version.
         PlaylistRequest.Song song = PlayAlbumSongsPatch.getSong(VideoInformation.getVideoId());
-        if (song != null) {
+        if (song != null && song.title() != null) {
             rawTitle = song.title();
             if (song.durationSeconds() > 0) {
                 durationSeconds = song.durationSeconds();
@@ -377,7 +379,7 @@ public final class LyricsManager {
                 durationSeconds
         );
 
-        if (track.title().isEmpty() || track.artist().isEmpty()) {
+        if (track.title() == null || track.title().isEmpty() || track.artist() == null || track.artist().isEmpty()) {
             return;
         }
 
@@ -431,13 +433,15 @@ public final class LyricsManager {
         String[] parsed = MetadataCleaner.parseCleanTitleAndArtist(title, artist);
         String cleanedTitle = parsed[1];
         String cleanedArtist = parsed[0];
-        if (cleanedTitle.isEmpty() || cleanedArtist.isEmpty()) {
+        if (cleanedTitle == null || cleanedTitle.isEmpty() || cleanedArtist == null || cleanedArtist.isEmpty()) {
             return;
         }
 
-        if (currentTrack != null
-                && currentTrack.title().equals(cleanedTitle)
-                && currentTrack.artist().equals(cleanedArtist)) {
+        // Store into local variable to avoid race conditions and IDE warnings for volatile variables
+        TrackInfo localTrack = currentTrack;
+        if (localTrack != null
+                && cleanedTitle.equals(localTrack.title())
+                && cleanedArtist.equals(localTrack.artist())) {
             if (mediaUri != null) {
                 currentMediaUri = mediaUri;
             }
@@ -470,7 +474,7 @@ public final class LyricsManager {
     }
 
     private void load(TrackInfo track) {
-        final int id = ++requestId;
+        final int id = requestId.incrementAndGet();
         setState(State.LOADING, null);
 
         synchronized (candidateQueue) {
@@ -488,7 +492,7 @@ public final class LyricsManager {
         searchQueryArtist = null;
         preferenceVideoId = VideoInformation.getVideoId();
 
-        runOnLookupThread(() -> runProviderLookup(id, track, null));
+        runOnLookupThread(() -> runProviderLookup(id, track));
     }
 
     /**
@@ -499,11 +503,11 @@ public final class LyricsManager {
     public void fetchNextCandidate() {
         Utils.verifyOnMainThread();
         TrackInfo track = currentTrack;
-        if (track == null) {
+        if (track == null || track.title() == null || track.artist() == null) {
             return;
         }
 
-        final int id = requestId;
+        final int id = requestId.get();
 
         // The user is leaving the lyric they were given, so whatever they land on next is
         // what the next playback of the track should open with.
@@ -532,12 +536,12 @@ public final class LyricsManager {
                 if (pollAndPublishNext(id, track)) {
                     return;
                 }
-                if (id == requestId) {
+                if (id == requestId.get()) {
                     phase2Done = true;
                 }
             }
 
-            setStateIfCurrent(id, State.NOT_FOUND, null);
+            setStateIfCurrent(id, State.NOT_FOUND);
         });
     }
 
@@ -550,7 +554,7 @@ public final class LyricsManager {
             if (next == null) {
                 return false;
             }
-            if (id != requestId) {
+            if (id != requestId.get()) {
                 return false;
             }
             if (next.lyrics() != currentLyrics
@@ -563,8 +567,8 @@ public final class LyricsManager {
     }
 
     private void collectRemainingCandidates(int id, TrackInfo track,
-                                             List<LyricsProvider> providers) {
-        if (id != requestId) {
+                                            List<LyricsProvider> providers) {
+        if (id != requestId.get()) {
             return;
         }
         Set<String> existing = new HashSet<>(shownFingerprints);
@@ -573,8 +577,9 @@ public final class LyricsManager {
                 existing.add(fingerprint(sc.lyrics()));
             }
         }
-        if (currentLyrics != null) {
-            existing.add(fingerprint(currentLyrics));
+        Lyrics lyrics = currentLyrics;
+        if (lyrics != null) {
+            existing.add(fingerprint(lyrics));
         }
 
         CompletionService<List<Lyrics.ScoredLyrics>> cs =
@@ -596,7 +601,7 @@ public final class LyricsManager {
 
         int completed = 0;
         while (completed < futures.size()) {
-            if (id != requestId) {
+            if (id != requestId.get()) {
                 break;
             }
             Future<List<Lyrics.ScoredLyrics>> f;
@@ -628,7 +633,7 @@ public final class LyricsManager {
 
     private void processCandidateFuture(Future<List<Lyrics.ScoredLyrics>> f, int id,
                                         TrackInfo track, Set<String> existing) {
-        if (id != requestId) {
+        if (id != requestId.get()) {
             return;
         }
         try {
@@ -638,12 +643,12 @@ public final class LyricsManager {
             }
             for (Lyrics.ScoredLyrics sc : candidates) {
                 Lyrics candidate = sc.lyrics();
-                if (candidate == null || !isValidLyrics(candidate, track)) {
+                if (!isValidLyrics(candidate, track)) {
                     continue;
                 }
                 String fp = fingerprint(candidate);
                 synchronized (candidateQueue) {
-                    if (id == requestId && existing.add(fp)) {
+                    if (id == requestId.get() && existing.add(fp)) {
                         int sync = LyricsRequests.syncRank(candidate);
                         int match = sc.score() - sync;
                         int composite = LyricsRequests.composite(match, candidate, 0);
@@ -657,14 +662,19 @@ public final class LyricsManager {
     }
 
     private static String fingerprint(Lyrics lyrics) {
+        if (lyrics == null) {
+            return "";
+        }
         String provider = lyrics.providerName();
         String raw = lyrics.rawFormat();
         if (raw != null && !raw.isEmpty()) {
             return provider + "|" + raw.hashCode();
         }
         StringBuilder sb = new StringBuilder();
-        for (LyricsLine line : lyrics.lines()) {
-            sb.append(line.text());
+        if (lyrics.lines() != null) {
+            for (LyricsLine line : lyrics.lines()) {
+                sb.append(line.text());
+            }
         }
         return provider + "|" + sb.toString().hashCode();
     }
@@ -705,10 +715,10 @@ public final class LyricsManager {
         }
         final Lyrics display = preferred;
         Utils.runOnMainThread(() -> {
-            if (id != requestId) {
+            if (id != requestId.get()) {
                 return;
             }
-            if (display == Lyrics.NOT_FOUND || display.isEmpty()) {
+            if (display == null || display == Lyrics.NOT_FOUND || display.isEmpty()) {
                 // Nothing of it survives the current filters. The lookup ahead was already
                 // told to hold back, so the suppression is released before it can return
                 // without showing anything.
@@ -721,7 +731,7 @@ public final class LyricsManager {
             if (storedFingerprint != null) {
                 shownFingerprints.add(storedFingerprint);
             }
-            Logger.printInfo(() -> "LyricsPref applied: lines=" + display.lines().size());
+            Logger.printInfo(() -> "LyricsPref applied: lines=" + (display.lines() != null ? display.lines().size() : 0));
         });
         return true;
     }
@@ -884,7 +894,7 @@ public final class LyricsManager {
     public void searchWithCustomQuery(String title, String artist, boolean defaultTerms) {
         Utils.verifyOnMainThread();
         final TrackInfo track = currentTrack;
-        if (track == null) {
+        if (track == null || track.title() == null || track.artist() == null) {
             return;
         }
         final String queryTitle = title != null ? title.trim() : "";
@@ -893,7 +903,7 @@ public final class LyricsManager {
             return;
         }
 
-        final int id = ++requestId;
+        final int id = requestId.incrementAndGet();
         preferenceVideoId = VideoInformation.getVideoId();
         setState(State.LOADING, currentLyrics);
         suppressForRequest = -1;
@@ -928,25 +938,26 @@ public final class LyricsManager {
                 phase2Done = false;
             }
             shownFingerprints.clear();
+            Lyrics lyrics = currentLyrics;
             // The lyric on screen stays until the search answers.
-            if (currentLyrics != null) {
-                shownFingerprints.add(fingerprint(currentLyrics));
+            if (lyrics != null) {
+                shownFingerprints.add(fingerprint(lyrics));
             }
             String preferredFp = preferredFingerprint;
             if (preferredFp != null) {
                 shownFingerprints.add(preferredFp);
             }
 
-            Tiers tiers = buildTiers(queryTrack, null, currentRawTitle, defaultTerms);
+            Tiers tiers = buildTiers(queryTrack, currentRawTitle, defaultTerms);
             boolean[] failed = {false};
             LookupResult fetchResult = fetchFromProviders(tiers.original(), tiers.derived(),
                     failed, providers, true);
-            Lyrics result = fetchResult.best;
+            Lyrics result = fetchResult.best();
             boolean validResult = isValidLyrics(result, track);
 
-            seedCandidateQueue(id, fetchResult.scored, validResult, result);
+            seedCandidateQueue(id, fetchResult.scored(), validResult, result);
 
-            if (id != requestId) {
+            if (id != requestId.get()) {
                 return;
             }
             if (validResult) {
@@ -956,12 +967,14 @@ public final class LyricsManager {
                 publishFromLookup(id, Lyrics.NOT_FOUND);
             }
 
-            scheduleQueueFill(id, fetchResult.queueFillPending, tiers.original(),
+            scheduleQueueFill(id, fetchResult.queueFillPending(), tiers.original(),
                     tiers.derived(), providers);
         });
     }
 
-    private void runProviderLookup(int id, TrackInfo track, @Nullable TrackInfo innertubeTrack) {
+    private void runProviderLookup(int id, TrackInfo track) {
+        if (track == null || track.title() == null || track.artist() == null) return;
+
         final boolean suppressed = applyRememberedPreference(id, track);
 
         // Local files take priority: read embedded LYRICS/LYRIC tags before hitting providers.
@@ -993,7 +1006,6 @@ public final class LyricsManager {
             return;
         }
 
-        boolean checkInnertube = innertubeTrack != null && !innertubeTrack.equals(track);
         int notFoundCached = 0;
         for (LyricsProvider provider : providers) {
             boolean providerMissed = false;
@@ -1008,20 +1020,6 @@ public final class LyricsManager {
             if (cached == Lyrics.NOT_FOUND && queryTrack == null) {
                 providerMissed = true;
             }
-            if (checkInnertube) {
-                Lyrics cachedIT = LyricsCache.get(innertubeTrack, provider.name());
-                if (cachedIT != null && cachedIT != Lyrics.NOT_FOUND) {
-                    LyricsCache.put(track, provider.name(), cachedIT);
-                    publishFromLookup(id, cachedIT);
-                    if (!suppressed) {
-                        return;
-                    }
-                    continue;
-                }
-                if (cachedIT == Lyrics.NOT_FOUND && cached == null) {
-                    providerMissed = true;
-                }
-            }
             if (providerMissed) {
                 notFoundCached++;
             }
@@ -1032,7 +1030,7 @@ public final class LyricsManager {
         }
 
         if (!Utils.isNetworkConnected()) {
-            setStateIfCurrent(id, State.ERROR, null);
+            setStateIfCurrent(id, State.ERROR);
             return;
         }
 
@@ -1042,25 +1040,22 @@ public final class LyricsManager {
         // Custom terms are taken as typed: no artist or dash splitting of them, and no
         // InnerTube metadata of the playing track, which says nothing about them.
         Tiers tiers = queryTrack != null
-                ? buildTiers(queryTrack, null, null, false)
-                : buildTiers(track, innertubeTrack, currentRawTitle, true);
+                ? buildTiers(queryTrack, null, false)
+                : buildTiers(track, currentRawTitle, true);
 
         LookupResult fetchResult = fetchFromProviders(tiers.original(), tiers.derived(),
                 failed, providers, false);
-        result = fetchResult.best;
+        result = fetchResult.best();
 
         boolean validResult = isValidLyrics(result, track);
         if (validResult) {
             LyricsCache.put(track, result.providerName(), result);
-            if (innertubeTrack != null && !innertubeTrack.equals(track)) {
-                LyricsCache.put(innertubeTrack, result.providerName(), result);
-            }
             publishFromLookup(id, result);
         }
 
-        seedCandidateQueue(id, fetchResult.scored, validResult, result);
+        seedCandidateQueue(id, fetchResult.scored(), validResult, result);
 
-        scheduleQueueFill(id, fetchResult.queueFillPending, tiers.original(),
+        scheduleQueueFill(id, fetchResult.queueFillPending(), tiers.original(),
                 tiers.derived(), providers);
 
         if (validResult) {
@@ -1071,23 +1066,20 @@ public final class LyricsManager {
         // a miss on typed terms says nothing about them and leaves the cache untouched.
         if (queryTrack == null) {
             for (LyricsProvider provider : providers) {
-                if (fetchResult.providersWithResults.contains(provider.name())) {
+                if (fetchResult.providersWithResults().contains(provider.name())) {
                     continue;
                 }
-                if (fetchResult.providersFailed.contains(provider.name())) {
+                if (fetchResult.providersFailed().contains(provider.name())) {
                     continue;
                 }
-                if (!fetchResult.providersAttempted.contains(provider.name())) {
+                if (!fetchResult.providersAttempted().contains(provider.name())) {
                     continue;
                 }
                 LyricsCache.put(track, provider.name(), Lyrics.NOT_FOUND);
-                if (innertubeTrack != null && !innertubeTrack.equals(track)) {
-                    LyricsCache.put(innertubeTrack, provider.name(), Lyrics.NOT_FOUND);
-                }
             }
         }
         if (failed[0]) {
-            setStateIfCurrent(id, State.ERROR, null);
+            setStateIfCurrent(id, State.ERROR);
         } else {
             publishFromLookup(id, Lyrics.NOT_FOUND);
         }
@@ -1096,7 +1088,7 @@ public final class LyricsManager {
     private void fillQueueInBackground(int id, List<VariantQuery> originalTier,
                                        List<VariantQuery> derivedTier,
                                        List<LyricsProvider> providers) {
-        if (id != requestId) {
+        if (id != requestId.get()) {
             return;
         }
         List<LyricsProvider> nonBlind = new ArrayList<>();
@@ -1148,7 +1140,7 @@ public final class LyricsManager {
         DisplayState fillDisplay = new DisplayState(false, false);
         int completed = 0;
         while (completed < futures.size()) {
-            if (id != requestId) {
+            if (id != requestId.get()) {
                 break;
             }
             long remaining = deadline - SystemClock.uptimeMillis();
@@ -1185,22 +1177,23 @@ public final class LyricsManager {
             }
         }
 
-        if (collected.isEmpty() || id != requestId) {
+        if (collected.isEmpty() || id != requestId.get()) {
             return;
         }
         Set<String> existing = new HashSet<>(shownFingerprints);
         synchronized (candidateQueue) {
-            if (id != requestId) {
+            if (id != requestId.get()) {
                 return;
             }
             for (ScoredCandidate sc : candidateQueue) {
                 existing.add(fingerprint(sc.lyrics()));
             }
-            if (currentLyrics != null) {
-                existing.add(fingerprint(currentLyrics));
+            Lyrics lyrics = currentLyrics;
+            if (lyrics != null) {
+                existing.add(fingerprint(lyrics));
             }
             for (ScoredCandidate sc : collected) {
-                if (id == requestId && existing.add(fingerprint(sc.lyrics()))) {
+                if (id == requestId.get() && existing.add(fingerprint(sc.lyrics()))) {
                     candidateQueue.add(sc);
                 }
             }
@@ -1220,6 +1213,9 @@ public final class LyricsManager {
         if (currentMediaUri != null) {
             return null;
         }
+        if (track == null || track.title() == null || track.artist() == null) {
+            return null;
+        }
         return LocalLyricsFetcher.resolveMediaStoreUri(
                 track.title(), track.artist(), track.durationSeconds(), currentRawTitle, currentRawArtist);
     }
@@ -1235,17 +1231,10 @@ public final class LyricsManager {
      * @param applyCleaner when false, only the track and its spelling variants are tried:
      *                     no artist splitting, dash splitting or other metadata rewriting.
      */
-    private Tiers buildTiers(TrackInfo track, @Nullable TrackInfo innertubeTrack,
-                             @Nullable String rawTitle, boolean applyCleaner) {
+    private Tiers buildTiers(TrackInfo track, @Nullable String rawTitle, boolean applyCleaner) {
         List<VariantQuery> originalTier = new ArrayList<>();
         List<VariantQuery> derivedTier = new ArrayList<>();
-        // InnerTube canonical metadata (different title/artist from localized).
-        if (innertubeTrack != null && !innertubeTrack.equals(track)) {
-            originalTier.add(new VariantQuery(innertubeTrack, 0));
-            for (TrackInfo v : CharactersConverter.variants(innertubeTrack)) {
-                derivedTier.add(new VariantQuery(v, 1));
-            }
-        }
+
         originalTier.add(new VariantQuery(track, 0));
         for (TrackInfo v : CharactersConverter.variants(track)) {
             derivedTier.add(new VariantQuery(v, 1));
@@ -1254,16 +1243,22 @@ public final class LyricsManager {
             return new Tiers(originalTier, derivedTier);
         }
 
-        String[] splitArtists = MetadataCleaner.splitArtists(track.artist());
+        String trackArtist = track.artist();
+        String trackTitle = track.title();
+        if (trackArtist == null || trackTitle == null) {
+            return new Tiers(originalTier, derivedTier);
+        }
+
+        String[] splitArtists = MetadataCleaner.splitArtists(trackArtist);
         for (String artist : splitArtists) {
-            if (!artist.equals(track.artist())) {
+            if (!artist.equals(trackArtist)) {
                 derivedTier.add(new VariantQuery(new TrackInfo(
-                        track.title(), artist, track.album(), track.durationSeconds()), 2));
+                        trackTitle, artist, track.album(), track.durationSeconds()), 2));
             }
         }
 
         TrackInfo trusted = MetadataCleaner.trustedDashSplit(
-                rawTitle, track.artist(), track.album(), track.durationSeconds());
+                rawTitle, trackArtist, track.album(), track.durationSeconds());
         if (trusted != null && !trusted.equals(track)) {
             originalTier.add(new VariantQuery(trusted, 1));
         }
@@ -1289,7 +1284,6 @@ public final class LyricsManager {
                                 Set<String> providersAttempted,
                                 boolean queueFillPending) {}
 
-    @Nullable
     private LookupResult fetchFromProviders(List<VariantQuery> originalTier,
                                             List<VariantQuery> derivedTier,
                                             boolean[] failed,
@@ -1580,7 +1574,7 @@ public final class LyricsManager {
     }
 
     private void publishFromLookup(int id, Lyrics lyrics, boolean remember) {
-        if (id != requestId) {
+        if (id != requestId.get()) {
             return;
         }
         Lyrics display;
@@ -1592,25 +1586,15 @@ public final class LyricsManager {
         final Lyrics raw = lyrics;
         final Lyrics prepared = display;
         Utils.runOnMainThread(() -> {
-            if (remember && id == requestId) {
+            if (remember && id == requestId.get()) {
                 persistOnPublish = true;
             }
-            publish(id, raw, prepared);
+            publishPrepared(id, raw, prepared);
         });
     }
 
-    private void publish(int id, Lyrics raw, Lyrics prepared) {
-        try {
-            publishPrepared(id, raw, prepared);
-        } catch (Throwable ignored) {
-            if (id == requestId) {
-                setState(State.NOT_FOUND, null);
-            }
-        }
-    }
-
     private void publishPrepared(int id, Lyrics raw, Lyrics prepared) {
-        if (id != requestId) {
+        if (id != requestId.get()) {
             return;
         }
 
@@ -1626,9 +1610,7 @@ public final class LyricsManager {
             incomingFp = fingerprint(raw);
         }
 
-        Lyrics lyrics = prepared;
-
-        if (lyrics == Lyrics.NOT_FOUND || lyrics.isEmpty()) {
+        if (prepared == null || prepared == Lyrics.NOT_FOUND || prepared.isEmpty()) {
             // Nothing was found, so the last lyric the user landed on stays the opening one.
             persistOnPublish = false;
             setState(State.NOT_FOUND, null);
@@ -1636,29 +1618,31 @@ public final class LyricsManager {
             if (incomingFp != null) {
                 shownFingerprints.add(incomingFp);
             }
-            shownFingerprints.add(fingerprint(lyrics));
-            setState(State.LOADED, lyrics);
+            shownFingerprints.add(fingerprint(prepared));
+            setState(State.LOADED, prepared);
             LyricsPanelInstaller.enableLyricsButton();
             Utils.runOnMainThreadDelayed(LyricsPanelInstaller::onLyricsPanelDetected, 300);
             if (persistOnPublish) {
                 persistOnPublish = false;
-                rememberPreference(lyrics);
+                rememberPreference(prepared);
             }
         }
     }
 
     /**
      * Filters out credit lines and text the user asked to hide, then normalizes the timings
-     * of synced lyrics, consulting the short lived cache of already filtered results.
+     * of synced lyrics, consulting the short-lived cache of already filtered results.
      */
     private Lyrics prepareForDisplay(Lyrics lyrics) {
         String cacheKey = null;
         if (lyrics != null && lyrics != Lyrics.NOT_FOUND && !lyrics.isEmpty()) {
             StringBuilder sb = new StringBuilder(lyrics.providerName());
             List<LyricsLine> lines = lyrics.lines();
-            int limit = Math.min(3, lines.size());
-            for (int i = 0; i < limit; i++) {
-                sb.append('|').append(lines.get(i).text());
+            if (lines != null) {
+                int limit = Math.min(3, lines.size());
+                for (int i = 0; i < limit; i++) {
+                    sb.append('|').append(lines.get(i).text());
+                }
             }
             cacheKey = sb.toString();
             Lyrics cached = filteredCache.get(cacheKey);
@@ -1670,11 +1654,11 @@ public final class LyricsManager {
         if (cacheKey == null || lyrics != filteredCache.get(cacheKey)) {
             lyrics = filterCreditLines(lyrics, currentTrack);
             lyrics = filterLyricsText(lyrics);
-            if (cacheKey != null) {
+            if (cacheKey != null && lyrics != null) {
                 filteredCache.put(cacheKey, lyrics);
             }
         }
-        if (lyrics.synced() && !lyrics.isEmpty()) {
+        if (lyrics != null && lyrics.synced() && !lyrics.isEmpty() && lyrics.lines() != null) {
             lyrics = new Lyrics(
                     Lyrics.clampLastWordEnds(
                             Lyrics.fixAnomalousWordTimestamps(lyrics.lines())),
@@ -1692,6 +1676,9 @@ public final class LyricsManager {
         }
 
         List<LyricsLine> original = lyrics.lines();
+        if (original == null) {
+            return lyrics;
+        }
         int size = original.size();
 
         boolean[] isCredit = new boolean[size];
@@ -1848,24 +1835,24 @@ public final class LyricsManager {
         String normalizedWithSpaces = normalized;
 
         normalized = normalized
-                 .replace('|', ':')
-                 .replace('｜', ':')
-                 .replace('—', ':')
-                 .replace('－', ':')
-                 .replace(';', ':')
-                 .replace('；', ':')
-                 .replace(',', ':')
-                 .replace('，', ':')
-                 .replace('~', ':')
-                 .replace('～', ':')
-                 .replace(' ', ':')
-                 .replace('：', ':')
-                 .replace('·', ':')
-                 .replace('@', ':')
-                 .replace('/', ':')
-                 .replace('\\', ':')
-                 .replace('&', ':')
-                 .replaceAll("\\s+:", ":");
+                .replace('|', ':')
+                .replace('｜', ':')
+                .replace('—', ':')
+                .replace('－', ':')
+                .replace(';', ':')
+                .replace('；', ':')
+                .replace(',', ':')
+                .replace('，', ':')
+                .replace('~', ':')
+                .replace('～', ':')
+                .replace(' ', ':')
+                .replace('：', ':')
+                .replace('·', ':')
+                .replace('@', ':')
+                .replace('/', ':')
+                .replace('\\', ':')
+                .replace('&', ':')
+                .replaceAll("\\s+:", ":");
 
         int sepIdx = normalized.indexOf(':');
         if (sepIdx >= 0) {
@@ -1875,24 +1862,7 @@ public final class LyricsManager {
         }
         String beforeSep = sepIdx >= 0 ? normalized.substring(0, sepIdx) : normalized;
 
-        boolean hasRealSeparator = false;
-        if (sepIdx >= 0) {
-            int realSepIdx = -1;
-            int spaceSepIdx = normalizedWithSpaces.indexOf(' ');
-            int colonSepIdx = normalizedWithSpaces.indexOf(':');
-            if (colonSepIdx >= 0) {
-                realSepIdx = colonSepIdx;
-            }
-            for (char c : new char[]{'|', '｜', '—', '－', '-', ';', '；', ',', '，', '~', '～',
-                    '：', '·', '@', '/', '\\', '&'}) {
-                int idx = normalizedWithSpaces.indexOf(c);
-                if (idx >= 0 && (realSepIdx < 0 || idx < realSepIdx)) {
-                    realSepIdx = idx;
-                }
-            }
-            hasRealSeparator = realSepIdx >= 0
-                    && (spaceSepIdx < 0 || realSepIdx < spaceSepIdx);
-        }
+        boolean hasRealSeparator = isRealSeparator(sepIdx, normalizedWithSpaces);
 
         for (String variant : allVariants) {
             if (variant.isEmpty()) {
@@ -1919,6 +1889,28 @@ public final class LyricsManager {
             }
         }
         return false;
+    }
+
+    private static boolean isRealSeparator(int sepIdx, String normalizedWithSpaces) {
+        boolean hasRealSeparator = false;
+        if (sepIdx >= 0) {
+            int realSepIdx = -1;
+            int spaceSepIdx = normalizedWithSpaces.indexOf(' ');
+            int colonSepIdx = normalizedWithSpaces.indexOf(':');
+            if (colonSepIdx >= 0) {
+                realSepIdx = colonSepIdx;
+            }
+            for (char c : new char[]{'|', '｜', '—', '－', '-', ';', '；', ',', '，', '~', '～',
+                    '：', '·', '@', '/', '\\', '&'}) {
+                int idx = normalizedWithSpaces.indexOf(c);
+                if (idx >= 0 && (realSepIdx < 0 || idx < realSepIdx)) {
+                    realSepIdx = idx;
+                }
+            }
+            hasRealSeparator = realSepIdx >= 0
+                    && (spaceSepIdx < 0 || realSepIdx < spaceSepIdx);
+        }
+        return hasRealSeparator;
     }
 
     private static List<String> getCachedCreditVariants(String[] markers) {
@@ -2032,7 +2024,7 @@ public final class LyricsManager {
      * Translations and romanizations are left untouched.
      */
     private static Lyrics filterLyricsText(Lyrics lyrics) {
-        if (lyrics == Lyrics.NOT_FOUND) {
+        if (lyrics == null || lyrics == Lyrics.NOT_FOUND) {
             return lyrics;
         }
         String filter = MetadataCleaner.resolveSetting(Settings.LYRICS_TEXT_FILTER.get());
@@ -2041,6 +2033,10 @@ public final class LyricsManager {
         }
 
         List<LyricsLine> original = lyrics.lines();
+        if (original == null) {
+            return lyrics;
+        }
+
         List<LyricsLine> filtered = new ArrayList<>(original.size());
         boolean anyDropped = false;
         for (LyricsLine line : original) {
@@ -2074,17 +2070,17 @@ public final class LyricsManager {
     }
 
     /** Applies a state only when the request it belongs to is still current, on the main thread. */
-    private void setStateIfCurrent(int id, State state, @Nullable Lyrics lyrics) {
+    private void setStateIfCurrent(int id, State state) {
         Utils.runOnMainThread(() -> {
-            if (id == requestId) {
-                setState(state, lyrics);
+            if (id == requestId.get()) {
+                setState(state, null);
             }
         });
     }
 
     private void scheduleQueueFill(int id, boolean pending, List<VariantQuery> original,
-            List<VariantQuery> derived, List<LyricsProvider> providers) {
-        if (id != requestId || !pending) {
+                                   List<VariantQuery> derived, List<LyricsProvider> providers) {
+        if (id != requestId.get() || !pending) {
             return;
         }
         final List<VariantQuery> fillOriginal = List.copyOf(original);
@@ -2095,9 +2091,9 @@ public final class LyricsManager {
     }
 
     private void seedCandidateQueue(int id, List<ScoredCandidate> scored, boolean validResult,
-            @Nullable Lyrics result) {
+                                    @Nullable Lyrics result) {
         synchronized (candidateQueue) {
-            if (id == requestId) {
+            if (id == requestId.get()) {
                 candidateQueue.clear();
                 for (ScoredCandidate sc : scored) {
                     if (validResult && sc.lyrics() == result) {
@@ -2115,7 +2111,7 @@ public final class LyricsManager {
 
     private void setState(State newState, @Nullable Lyrics lyrics) {
         if (newState == State.ERROR || newState == State.NOT_FOUND) {
-            if (suppressForRequest == requestId) {
+            if (suppressForRequest == requestId.get()) {
                 // The lyric on screen was chosen by the user; a failed lookup keeps it there.
                 return;
             }
@@ -2142,20 +2138,23 @@ public final class LyricsManager {
 
     @NonNull
     public String getCurrentLineText() {
-        if (currentLyrics == null || !currentLyrics.synced() || currentLyrics.isEmpty()) {
+        Lyrics lyrics = currentLyrics;
+        if (lyrics == null || !lyrics.synced() || lyrics.isEmpty()) {
             return "";
         }
-        final int index = currentLyrics.indexForPosition(getPositionMs(), lastHighlightedIndex);
+        final int index = lyrics.indexForPosition(getPositionMs(), lastHighlightedIndex);
         lastHighlightedIndex = index;
-        if (index < 0) {
+        if (index < 0 || lyrics.lines() == null || index >= lyrics.lines().size()) {
             return "";
         }
-        String text = currentLyrics.lines().get(index).text();
-        return text == null ? "" : text;
+        LyricsLine line = lyrics.lines().get(index);
+        if (line == null || line.text() == null) return "";
+        return line.text();
     }
 
     public boolean areLyricsSynced() {
-        return currentLyrics != null && currentLyrics.synced() && !currentLyrics.isEmpty();
+        Lyrics lyrics = currentLyrics;
+        return lyrics != null && lyrics.synced() && !lyrics.isEmpty();
     }
 
     @NonNull
@@ -2215,9 +2214,9 @@ public final class LyricsManager {
     @Nullable
     private static LyricsProvider providerFor(String id) {
         return switch (id) {
-            case "YTMusic" -> new YTMusicProvider();
+            case "YTMusic" -> new YouTubeMusicProvider();
             case "Captions" -> new CaptionsFetcher.CaptionsProvider();
-            case "LRCLIB" -> new LrcLibProvider();
+            case "LRCLIB" -> new LRCLIBProvider();
             case "QQ" -> new QQProvider();
             case "NetEase" -> new NetEaseProvider();
             case "KuGou" -> new KuGouProvider();
@@ -2227,7 +2226,7 @@ public final class LyricsManager {
             case "BiniLyrics" -> new BinimumProvider();
             case "Unison" -> new UnisonProvider();
             case "SimpMusic" -> new SimpMusicProvider();
-            case "AMLL" -> new AmllProvider();
+            case "AMLL" -> new AMlLProvider();
             case "LunaBeat" -> new LunaBeatProvider();
             case "Apple" -> new AppleMusicProvider();
             case "Spotify" -> new SpotifyProvider();

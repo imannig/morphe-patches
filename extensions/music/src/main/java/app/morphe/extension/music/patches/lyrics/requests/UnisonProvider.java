@@ -178,9 +178,9 @@ public final class UnisonProvider implements LyricsProvider {
     private Lyrics parseLyrics(String format, String lyrics, String videoId) {
         switch (format.toLowerCase(Locale.ROOT)) {
             case "ttml":
-                return TtmlParser.ttmlToLyrics(lyrics, name(), sourceUrl(videoId));
+                return TTMLParser.ttmlToLyrics(lyrics, name(), sourceUrl(videoId));
             case "lrc":
-                LrcParser.LrcParseResult result = LrcParser.parseSyncedWithCreditLines(lyrics);
+                LRCParser.LrcParseResult result = LRCParser.parseSyncedWithCreditLines(lyrics);
                 if (result.lines.isEmpty()) {
                     return null;
                 }
@@ -188,7 +188,7 @@ public final class UnisonProvider implements LyricsProvider {
                         result.creditLines.isEmpty() ? null : result.creditLines,
                         lyrics, "lrc", sourceUrl(videoId));
             case "plain":
-                final List<LyricsLine> plain = LrcParser.parsePlain(lyrics);
+                final List<LyricsLine> plain = LRCParser.parsePlain(lyrics);
                 if (plain.isEmpty()) {
                     return null;
                 }

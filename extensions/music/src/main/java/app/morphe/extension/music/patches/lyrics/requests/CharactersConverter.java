@@ -138,7 +138,7 @@ public final class CharactersConverter {
      *   <li>Latin → ASCII (removes diacritics, e.g. Beyoncé → Beyonce)</li>
      *   <li>Hiragana ↔ Katakana (Japanese)</li>
      * </ul>
-     * Variants are generated independently from the original (not chained) to keep the number
+     * Variants are generated independently of the original (not chained) to keep the number
      * manageable. Variants identical to the original or to each other are omitted.
      * <p>
      * The order follows expected usefulness: CJK script variants first, then normalization,

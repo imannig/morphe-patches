@@ -1667,6 +1667,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void buildLyrics(Lyrics newLyrics) {
         if (onlyMode != displayedOnlyMode && !contentOutPending && !lineViews.isEmpty()) {
             contentOutPending = true;
@@ -1772,7 +1773,6 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
             lineView.contentReveal = contentInBuild ? 0f : 1f;
             lineView.setPadding(0, Dim.dp8, 0, Dim.dp8);
             lineView.setIncludeFontPadding(false);
-            //noinspection deprecation
             lineView.getPaint().setElegantTextHeight(true);
             lineView.setTypeface(null, Typeface.BOLD);
 
@@ -3088,6 +3088,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
      * with what was searched before, or with the filtered metadata of the track, and what
      * the search finds replaces the whole candidate queue.
      */
+    @SuppressWarnings("deprecation")
     private void openSearchDialog() {
         if (refreshView == null) {
             return;
@@ -3167,7 +3168,6 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                         LinearLayout.LayoutParams.WRAP_CONTENT));
         Window window = dialog.getWindow();
         if (window != null) {
-            //noinspection deprecation
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
         dialog.show();
