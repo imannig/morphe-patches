@@ -12,8 +12,8 @@ import static app.morphe.extension.shared.sponsorblock.objects.CategoryBehaviour
 
 import app.morphe.extension.music.patches.ChangeHeaderPatch.HeaderLogo;
 import app.morphe.extension.music.patches.ChangeStartPagePatch.StartPage;
-import app.morphe.extension.music.patches.CrossfadeManager.CrossFadeDuration;
-import app.morphe.extension.music.patches.CrossfadeManager.FadeCurve;
+import app.morphe.extension.music.patches.CrossfadePatch.CrossFadeDuration;
+import app.morphe.extension.music.patches.CrossfadePatch.FadeCurve;
 import app.morphe.extension.music.patches.lyrics.OpenAIClient;
 import app.morphe.extension.music.sponsorblock.MusicSponsorBlockConfig;
 import app.morphe.extension.shared.Logger;
@@ -39,6 +39,7 @@ public class Settings extends SharedYouTubeSettings {
     public static final BooleanSetting HIDE_VIDEO_ADS = new BooleanSetting("morphe_music_hide_video_ads", TRUE, true);
 
     // Feed
+    public static final BooleanSetting HIDE_DOWNLOAD_BUTTON_IN_PODCAST = new BooleanSetting("morphe_music_hide_download_button_in_podcast", FALSE, true);
     public static final BooleanSetting HIDE_EXPLORE_SHELF = new BooleanSetting("morphe_music_hide_explore_shelf", FALSE, true);
     public static final BooleanSetting HIDE_GRID_SHELVES = new BooleanSetting("morphe_music_hide_grid_shelves", FALSE, true);
     public static final BooleanSetting HIDE_HORIZONTAL_SHELVES = new BooleanSetting("morphe_music_hide_horizontal_shelves", FALSE, true);
@@ -58,7 +59,6 @@ public class Settings extends SharedYouTubeSettings {
     public static final BooleanSetting HIDE_SOUND_SEARCH_BUTTON = new BooleanSetting("morphe_music_hide_sound_search_button", FALSE, true);
     public static final BooleanSetting HIDE_LIBRARY_NEW_BUTTON = new BooleanSetting("morphe_music_hide_library_new_button", FALSE, true);
     public static final BooleanSetting HIDE_NOTIFICATION_BUTTON = new BooleanSetting("morphe_music_hide_notification_button", FALSE, true);
-    public static final BooleanSetting HIDE_PODCAST_EPISODE_DOWNLOAD_BUTTON = new BooleanSetting("morphe_music_hide_podcast_episode_download_button", FALSE, true);
     public static final BooleanSetting HIDE_NAVIGATION_BAR = new BooleanSetting("morphe_music_hide_navigation_bar", FALSE, true);
     public static final BooleanSetting HIDE_NAVIGATION_BAR_HOME_BUTTON = new BooleanSetting("morphe_music_hide_navigation_bar_home_button", FALSE, true, parentNot(HIDE_NAVIGATION_BAR));
     public static final BooleanSetting HIDE_NAVIGATION_BAR_SAMPLES_BUTTON = new BooleanSetting("morphe_music_hide_navigation_bar_samples_button", FALSE, true, parentNot(HIDE_NAVIGATION_BAR));

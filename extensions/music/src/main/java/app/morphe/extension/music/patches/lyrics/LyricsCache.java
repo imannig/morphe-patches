@@ -9,6 +9,7 @@ package app.morphe.extension.music.patches.lyrics;
 
 import android.content.Context;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.File;
@@ -24,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import app.morphe.extension.music.patches.lyrics.requests.LrcParser;
+import app.morphe.extension.music.patches.lyrics.requests.LRCParser;
 import app.morphe.extension.music.settings.Settings;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
@@ -57,7 +58,7 @@ final class LyricsCache {
     private static final String NOT_FOUND_MARKER = "#notfound";
 
     private static final Map<String, Lyrics> memoryCache = Collections.synchronizedMap(
-            new LinkedHashMap<String, Lyrics>(MEMORY_ENTRIES, 0.75f, true) {
+            new LinkedHashMap<>(MEMORY_ENTRIES, 0.75f, true) {
                 @Override
                 protected boolean removeEldestEntry(Map.Entry<String, Lyrics> eldest) {
                     return size() > MEMORY_MAX_ENTRIES;
@@ -215,12 +216,12 @@ final class LyricsCache {
         }
         for (LyricsLine line : lyrics.lines()) {
             fileLines.add(lyrics.synced()
-                    ? LrcParser.formatLine(line)
+                    ? LRCParser.formatLine(line)
                     : line.text());
         }
     }
 
-    @Nullable
+    @NonNull
     private static String name(@Nullable File file) {
         return file == null ? "null" : file.getName();
     }
@@ -488,8 +489,7 @@ final class LyricsCache {
     }
 
     @Nullable
-    private static Lyrics parseContent(List<String> lines, int contentStart, TrackInfo track)
-            throws Exception {
+    private static Lyrics parseContent(List<String> lines, int contentStart, TrackInfo track) {
         Header header = parseHeaders(lines, contentStart);
         String content = String.join("\n",
                 lines.subList(header.contentStart(), lines.size()));
@@ -551,8 +551,8 @@ final class LyricsCache {
                                             @Nullable List<String> songwriters,
                                             @Nullable String sourceUrl, String key) {
         List<LyricsLine> parsed = synced
-                ? LrcParser.parseSynced(content)
-                : LrcParser.parsePlain(content);
+                ? LRCParser.parseSynced(content)
+                : LRCParser.parsePlain(content);
         if (parsed.isEmpty()) {
             return null;
         }

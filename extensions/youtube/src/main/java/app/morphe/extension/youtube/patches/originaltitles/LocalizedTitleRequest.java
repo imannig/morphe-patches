@@ -94,6 +94,7 @@ final class LocalizedTitleRequest {
         return request != null && !request.isDone();
     }
 
+    @SuppressWarnings("deprecation")
     @Nullable
     private static String fetchTitle(String key, String videoId, Locale locale) {
         String language = locale.toLanguageTag();

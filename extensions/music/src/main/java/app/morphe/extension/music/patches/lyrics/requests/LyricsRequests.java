@@ -120,16 +120,16 @@ public final class LyricsRequests {
     /**
      * Opens a GET connection with configurable timeouts and extra headers.
      */
-    static HttpURLConnection openConnection(String url, int connectTimeoutMs,
-            int readTimeoutMs, Map<String, String> headers) throws IOException {
+    static HttpURLConnection openConnection(String url,
+                                            Map<String, String> headers) throws IOException {
         // A cancelled provider may finish one blocking request and try the next one.
         if (Thread.currentThread().isInterrupted()) {
             throw new InterruptedIOException("Lyrics lookup cancelled");
         }
         HttpURLConnection connection = Requester.openConnection(url);
         connection.setRequestMethod("GET");
-        connection.setConnectTimeout(connectTimeoutMs);
-        connection.setReadTimeout(readTimeoutMs);
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(15000);
         connection.setRequestProperty("User-Agent", userAgent());
         if (headers != null) {
             for (Map.Entry<String, String> entry : headers.entrySet()) {
@@ -587,7 +587,7 @@ public final class LyricsRequests {
 
     private static String stripDecorations(String s) {
         String regex = Settings.LYRICS_CUSTOM_REGEX.get();
-        if (regex == null || regex.trim().isEmpty()) {
+        if (regex.trim().isEmpty()) {
             return s;
         }
         java.util.regex.Pattern pattern = decorationPattern;
@@ -712,10 +712,7 @@ public final class LyricsRequests {
             return false;
         }
         if (v.score() >= 7) {
-            if (v.duration() == Evidence.MISMATCH && v.artist() != Evidence.MATCH) {
-                return false;
-            }
-            return true;
+            return v.duration() != Evidence.MISMATCH || v.artist() == Evidence.MATCH;
         }
         return v.title() == Evidence.EQUAL
                 && v.duration() != Evidence.MISMATCH

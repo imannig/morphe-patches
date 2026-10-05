@@ -44,7 +44,7 @@ public final class BinimumProvider implements LyricsProvider {
                 return null;
             }
             String ttml = Requester.parseString(connection);
-            return FetchResult.blind(TtmlParser.ttmlToLyrics(ttml, name(), null));
+            return FetchResult.blind(TTMLParser.ttmlToLyrics(ttml, name(), null));
         } finally {
             if (connection != null) {
                 connection.disconnect();

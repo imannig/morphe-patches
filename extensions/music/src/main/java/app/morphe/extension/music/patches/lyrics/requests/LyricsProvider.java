@@ -16,7 +16,7 @@ import app.morphe.extension.music.patches.lyrics.Lyrics;
 import app.morphe.extension.music.patches.lyrics.TrackInfo;
 
 /**
- * A third party lyrics backend.
+ * A third party lyrics' backend.
  */
 public interface LyricsProvider {
 
@@ -105,7 +105,7 @@ public interface LyricsProvider {
     FetchResult fetch(TrackInfo track) throws Exception;
 
     /**
-     * Returns scored candidate lyrics for the track, best first.
+     * Returns scored candidate lyrics for the track, the best first.
      * Scores use the shared match+sync scale from {@link LyricsRequests}.
      */
     default List<Lyrics.ScoredLyrics> fetchCandidates(TrackInfo track) throws Exception {

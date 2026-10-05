@@ -115,8 +115,8 @@ public final class AppleMusicProvider implements LyricsProvider {
             return null;
         }
         JSONObject song = songs.get(0);
-        String songId = song.optString("id", null);
-        if (songId == null) {
+        String songId = song.optString("id");
+        if (songId.isEmpty()) {
             return null;
         }
         Lyrics lyrics = fetchLyrics(ctx.userToken, ctx.storefront, ctx.language, songId);
@@ -153,8 +153,8 @@ public final class AppleMusicProvider implements LyricsProvider {
             if (scored.size() >= LyricsRequests.MAX_CANDIDATES) {
                 break;
             }
-            String songId = song.optString("id", null);
-            if (songId == null) {
+            String songId = song.optString("id");
+            if (songId.isEmpty()) {
                 continue;
             }
             try {
@@ -528,7 +528,7 @@ public final class AppleMusicProvider implements LyricsProvider {
             if (ttml == null) {
                 return null;
             }
-            return TtmlParser.ttmlToLyrics(ttml, name(), sourceUrl);
+            return TTMLParser.ttmlToLyrics(ttml, name(), sourceUrl);
         } catch (Exception ex) {
             Logger.printDebug(() -> logContext, ex);
             return null;
@@ -625,7 +625,7 @@ public final class AppleMusicProvider implements LyricsProvider {
             if (ttml == null) {
                 return null;
             }
-            return TtmlParser.ttmlToLyrics(ttml, name(), sourceUrl);
+            return TTMLParser.ttmlToLyrics(ttml, name(), sourceUrl);
         } catch (Exception ex) {
             Logger.printDebug(() -> "Could not fetch Apple Music included lyrics", ex);
             return null;
@@ -670,7 +670,7 @@ public final class AppleMusicProvider implements LyricsProvider {
                 return null;
             }
             String sourceUrl = "https://music.apple.com/song/" + trackId;
-            return TtmlParser.ttmlToLyrics(ttml, "Apple (via Lyrically)", sourceUrl);
+            return TTMLParser.ttmlToLyrics(ttml, "Apple (via Lyrically)", sourceUrl);
         } catch (Exception ex) {
             Logger.printDebug(() -> "Could not fetch lyrics via Lyrically", ex);
             return null;
@@ -694,8 +694,8 @@ public final class AppleMusicProvider implements LyricsProvider {
                 return null;
             }
 
-            String title = track.title().toLowerCase().trim();
-            String artist = track.artist().toLowerCase().trim();
+            String title = track.title().toLowerCase(Locale.ROOT).trim();
+            String artist = track.artist().toLowerCase(Locale.ROOT).trim();
             String bestId = null;
             int bestScore = -1;
 
@@ -712,8 +712,8 @@ public final class AppleMusicProvider implements LyricsProvider {
                 }
                 int score = LyricsRequests.scoreTrackCandidate(itemTitle, itemArtist,
                         item.optLong("trackTimeMillis", 0) / 1000, track);
-                boolean exact = itemTitle.toLowerCase().contains(title)
-                        && itemArtist.toLowerCase().contains(artist);
+                boolean exact = itemTitle.toLowerCase(Locale.ROOT).contains(title)
+                        && itemArtist.toLowerCase(Locale.ROOT).contains(artist);
                 if (score < LyricsRequests.SOFT_MIN) {
                     continue;
                 }

@@ -155,10 +155,10 @@ public final class NetEaseProvider implements LyricsProvider {
 
         List<String> creditLines = parseYrcCredits(yrc);
 
-        List<LyricsLine> romaLines = romalrc.isEmpty() ? null : LrcParser.parseSynced(romalrc);
+        List<LyricsLine> romaLines = romalrc.isEmpty() ? null : LRCParser.parseSynced(romalrc);
         List<LyricsLine> romanization = LyricsMerge.mergeRomanization(lines, romaLines);
 
-        List<LyricsLine> transLines = tlyric.isEmpty() ? null : LrcParser.parseSynced(tlyric);
+        List<LyricsLine> transLines = tlyric.isEmpty() ? null : LRCParser.parseSynced(tlyric);
         List<LyricsLine> translation = LyricsMerge.mergeRomanization(lines, transLines);
         Map<String, List<LyricsLine>> translations =
                 LyricsMerge.singleLanguageTranslations(translation, "zh");

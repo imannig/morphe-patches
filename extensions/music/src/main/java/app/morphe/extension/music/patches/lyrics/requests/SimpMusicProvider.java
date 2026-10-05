@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,7 +43,7 @@ public final class SimpMusicProvider implements LyricsProvider {
     @Override
     public FetchResult fetch(TrackInfo track) throws Exception {
         final String videoId = VideoInformation.getVideoId();
-        if (videoId == null || videoId.isEmpty()) {
+        if (videoId.isEmpty()) {
             return null;
         }
         return FetchResult.of(fetchByVideoId(videoId));
@@ -122,7 +123,7 @@ public final class SimpMusicProvider implements LyricsProvider {
         }
         final String plain = LyricsRequests.optString(entry, "plainLyric");
         if (plain != null) {
-            final List<LyricsLine> lines = LrcParser.parsePlain(plain);
+            final List<LyricsLine> lines = LRCParser.parsePlain(plain);
             if (!lines.isEmpty()) {
                 return new Lyrics(lines, name(), false,
                         null, null, null, null, plain, "plain", sourceUrl(videoId));
@@ -135,7 +136,7 @@ public final class SimpMusicProvider implements LyricsProvider {
     private Lyrics parseLrc(String lrc, String videoId) {
         final long[] offsetHolder = {0};
         final String sanitized = sanitizeLrc(lrc, offsetHolder);
-        final LrcParser.LrcParseResult result = LrcParser.parseSyncedWithCreditLines(sanitized);
+        final LRCParser.LrcParseResult result = LRCParser.parseSyncedWithCreditLines(sanitized);
         if (result.lines.isEmpty()) {
             return null;
         }
@@ -185,9 +186,9 @@ public final class SimpMusicProvider implements LyricsProvider {
             builder.append(text, last, matcher.start());
             try {
                 if (matcher.group(1) != null) {
-                    builder.append((char) Integer.parseInt(matcher.group(1), 16));
+                    builder.append((char) Integer.parseInt(Objects.requireNonNull(matcher.group(1)), 16));
                 } else {
-                    builder.append((char) Integer.parseInt(matcher.group(2)));
+                    builder.append((char) Integer.parseInt(Objects.requireNonNull(matcher.group(2))));
                 }
             } catch (NumberFormatException ex) {
                 Logger.printDebug(() -> "Could not parse HTML entity in SimpMusic", ex);
