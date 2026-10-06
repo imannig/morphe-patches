@@ -40,6 +40,7 @@ import androidx.annotation.Nullable;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
+import java.util.Map;
 
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.ResourceType;
@@ -205,7 +206,7 @@ public final class MinimalMiniplayerPatch {
      */
     private static String previousVideoTitle = "";
     private static String previousChannelTitle = "";
-
+    private static Boolean videoDetailsFetched;
 
     /**
      * Injection point.
@@ -1029,12 +1030,30 @@ public final class MinimalMiniplayerPatch {
         updatePlayPauseIcon(false);
     }
 
-    private static void updateText() {
-        if (!ShortsPlayerState.isOpen()) {
+    /**
+     * Injection point.
+     * Executed once, when a video is opened.
+     */
+    public static boolean onVideoIntentLoaded(Map<Object, Object> playbackStartDescriptorMap, String videoId) {
+        videoDetailsFetched = false;
+
+        return false;
+    }
+
+    /**
+     * Injection point.
+     * Executed twice, when a video is loaded and player minimization is finished.
+     */
+    public static void updateVideoDetails() {
+        if (!videoDetailsFetched) {
             previousVideoTitle = VideoInformation.getVideoTitle();
             previousChannelTitle = VideoInformation.getChannelName();
-        }
 
+            videoDetailsFetched = true;
+        }
+    }
+
+    private static void updateText() {
         setText(titleRef.get(), previousVideoTitle);
 
         TextView subtitle = subtitleRef.get();
