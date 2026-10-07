@@ -37,6 +37,8 @@ import android.widget.TextView;
 
 import java.util.List;
 
+import androidx.annotation.NonNull;
+
 import app.morphe.extension.music.patches.lyrics.GeminiClient;
 import app.morphe.extension.music.patches.lyrics.OpenAIClient;
 import app.morphe.extension.music.settings.Settings;
@@ -129,12 +131,26 @@ public class LyricsAiConfigPreference extends SwitchPreference
     private static String formatProviderName(String value) {
         if (value == null) return "Google";
         switch (value.toLowerCase()) {
+            case "offline": return "Offline (ICU)";
             case "gemini": return "Gemini";
             case "openrouter": return "OpenRouter";
             case "openai": return "OpenAI";
             case "openai_compatible": return "Custom API";
             case "deepl": return "DeepL";
             default: return "Google";
+        }
+    }
+
+    private static boolean isAiProvider(String val) {
+        if (val == null) return false;
+        switch (val.toLowerCase(java.util.Locale.ROOT)) {
+            case "gemini":
+            case "openrouter":
+            case "openai":
+            case "openai_compatible":
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -457,7 +473,7 @@ public class LyricsAiConfigPreference extends SwitchPreference
 
                     Settings.LYRICS_DEEPL_API_KEY.save(deeplKeyInput.getText().toString().trim());
 
-                    boolean hasAiProvider = !"google".equals(selectedTrans[0]) || !"google".equals(selectedRoma[0]);
+                    boolean hasAiProvider = isAiProvider(selectedTrans[0]) || isAiProvider(selectedRoma[0]);
                     Settings.LYRICS_USE_AI_TRANSLATION.save(hasAiProvider);
 
                     settingFromCode = true;

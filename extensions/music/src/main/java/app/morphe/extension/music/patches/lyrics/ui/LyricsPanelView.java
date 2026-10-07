@@ -615,39 +615,29 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
 
                 if (isContinuousScript) {
                     WordUnit u = firstInGroup;
-                    if (curX + u.kanjiWidth > availableWidth && curX > 0f) {
+                    float pillarW = Math.max(u.kanjiWidth, u.romajiWidth);
+                    if (curX > 0f && curX + pillarW > availableWidth) {
                         curX = 0f;
                         currentLine++;
                         curY += lineSpacing;
                         lastRomajiEndX = 0f;
                     }
-                    u.kanjiX = curX;
-                    u.kanjiY = curY + kanjiBaseline;
-                    curX += u.kanjiWidth + (u.endsWithSpace ? (baseSpaceWidth * 0.6f) : 0f);
-
-                    if (!u.romaji.isEmpty()) {
-                        final boolean isContinuation = (i > 0 && !wordUnits.get(i - 1).endsWithSpace);
-                        if (isContinuation && lastRomajiEndX > 0f) {
-                            // Part of the same Japanese/CJK word: place romaji directly adjacent with 0 gap
-                            u.romajiX = lastRomajiEndX;
-                        } else {
-                            // Word boundary: add word spacing if previous word had space
-                            float wordSpace = (i > 0 && wordUnits.get(i - 1).endsWithSpace)
-                                    ? (baseSpaceWidth * 0.45f) : 0f;
-                            float idealRomaX = u.kanjiX + (u.kanjiWidth - u.romajiWidth) / 2f;
-                            u.romajiX = Math.max(lastRomajiEndX + wordSpace, idealRomaX);
-                        }
-                        lastRomajiEndX = u.romajiX + u.romajiWidth;
-                    } else {
-                        u.romajiX = u.kanjiX;
-                    }
-                    u.romajiY = curY + kanjiHeight + romajiMargin + romajiBaseline;
-
-                    u.unitLeft = Math.min(u.kanjiX, u.romajiX);
-                    u.unitRight = Math.max(u.kanjiX + u.kanjiWidth, u.romajiX + u.romajiWidth);
+                    u.unitLeft = curX;
+                    u.unitRight = curX + pillarW;
                     u.lineIndex = currentLine;
                     u.lineTop = curY;
                     u.lineBottom = curY + singleLineHeight;
+
+                    u.kanjiX = curX;
+                    u.romajiX = curX;
+                    u.kanjiY = curY + kanjiBaseline;
+                    u.romajiY = curY + kanjiHeight + romajiMargin + romajiBaseline;
+
+                    if (!u.romaji.isEmpty()) {
+                        lastRomajiEndX = u.romajiX + u.romajiWidth;
+                    }
+                    float spacing = u.endsWithSpace ? (baseSpaceWidth * 0.6f) : 0f;
+                    curX += pillarW + spacing;
 
                     u.wordStartMs = u.startMs;
                     u.wordEndMs = u.endMs;
@@ -697,7 +687,9 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                         final float spacing;
                         if (LyricsRomanizer.containsHangul(u.kanji)) {
                             spacing = u.endsWithSpace ? (baseSpaceWidth * 0.65f) : 0f;
-                        } else if (LyricsRomanizer.containsCyrillic(u.kanji) || LyricsRomanizer.containsArabic(u.kanji)) {
+                        } else if (LyricsRomanizer.containsCyrillic(u.kanji) || LyricsRomanizer.containsArabic(u.kanji)
+                                || LyricsRomanizer.containsHebrew(u.kanji) || LyricsRomanizer.containsGreek(u.kanji)
+                                || LyricsRomanizer.containsDevanagari(u.kanji) || LyricsRomanizer.containsThai(u.kanji)) {
                             spacing = u.endsWithSpace ? (hasRomaji ? (baseSpaceWidth * 0.75f) : baseSpaceWidth) : 0f;
                         } else {
                             spacing = u.endsWithSpace ? baseSpaceWidth : 0f;
@@ -709,8 +701,14 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                         u.lineTop = curY;
                         u.lineBottom = curY + singleLineHeight;
 
-                        u.kanjiX = curX + Math.max(0f, (pillarW - u.kanjiWidth) / 2f);
-                        u.romajiX = curX + Math.max(0f, (pillarW - u.romajiWidth) / 2f);
+                        final boolean isRtl = LyricsRomanizer.containsArabic(u.kanji) || LyricsRomanizer.containsHebrew(u.kanji);
+                        if (isRtl) {
+                            u.kanjiX = curX + Math.max(0f, pillarW - u.kanjiWidth);
+                            u.romajiX = curX + Math.max(0f, pillarW - u.romajiWidth);
+                        } else {
+                            u.kanjiX = curX;
+                            u.romajiX = curX;
+                        }
                         u.kanjiY = curY + kanjiBaseline;
                         u.romajiY = curY + kanjiHeight + romajiMargin + romajiBaseline;
 
@@ -2920,10 +2918,15 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
             lineRow.setClipToPadding(false);
 
             final int duetSideInset = Math.max(Dim.dp(48), (int) (context.getResources().getDisplayMetrics().widthPixels * 0.18f));
+            final boolean isLineRtl = LyricsRomanizer.containsArabic(line.text()) || LyricsRomanizer.containsHebrew(line.text());
             if (line.isDuet()) {
                 lineView.setGravity(Gravity.END);
                 lineView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
                 lineRow.setPadding(duetSideInset, Dim.dp(2), 0, Dim.dp(2));
+            } else if (isLineRtl) {
+                lineView.setGravity(Gravity.END);
+                lineView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
+                lineRow.setPadding(0, Dim.dp(2), 0, Dim.dp(2));
             } else {
                 lineView.setGravity(Gravity.START);
                 lineView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
@@ -2960,11 +2963,11 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
 
             for (int i = 0; i < lineCount; i++) {
                 LyricsLine l = newLyrics.lines().get(i);
-                List<WordTiming> timings = computeWordTimings(l);
-                allTimings.add(timings);
-
                 LyricsLine rLine = (romanizedLines != null && i < romanizedLines.size())
                         ? romanizedLines.get(i) : null;
+                List<WordTiming> timings = computeWordTimings(l, rLine);
+                allTimings.add(timings);
+
                 List<LyricsLineView.WordUnit> units = buildWordUnits(l, rLine, timings);
                 allWordUnits.add(units);
 
@@ -3065,7 +3068,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         scrollView.post(() -> isProgrammaticScrolling = false);
     }
 
-    private static List<WordTiming> computeWordTimings(LyricsLine line) {
+    private static List<WordTiming> computeWordTimings(LyricsLine line, @Nullable LyricsLine rLine) {
         if (!line.hasWords()) {
             return Collections.emptyList();
         }
@@ -3084,6 +3087,10 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 if (wordEnd <= wordStart) {
                     return Collections.emptyList();
                 }
+                String romaji = single.romaji();
+                if ((romaji == null || romaji.isEmpty()) && rLine != null && rLine.hasWords() && !rLine.words().isEmpty()) {
+                    romaji = rLine.words().get(0).romaji();
+                }
                 int charCount = wText.length();
                 long dur = wordEnd - wordStart;
                 long perChar = dur / charCount;
@@ -3093,7 +3100,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                     int next = pos + Character.charCount(wText.codePointAt(pos));
                     timings.add(new WordTiming(pos, next,
                             wordStart + i * perChar,
-                            wordStart + (i + 1) * perChar, null));
+                            wordStart + (i + 1) * perChar, romaji));
                     pos = next;
                 }
                 return timings;
@@ -3104,7 +3111,8 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         List<WordTiming> timings = new ArrayList<>(line.words().size());
         int textLength = text.length();
         int offset = 0;
-        for (Word word : line.words()) {
+        for (int wi = 0; wi < line.words().size(); wi++) {
+            Word word = line.words().get(wi);
             String rawWord = isSec ? stripParentheses(word.text()) : word.text();
             String wordText = cleanJapaneseQuotes(rawWord).trim();
             int wordLength = wordText.length();
@@ -3130,7 +3138,11 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
             if (start >= end) {
                 continue;
             }
-            timings.add(new WordTiming(start, end, word.startMs(), word.endMs(), word.romaji()));
+            String wordRom = word.romaji();
+            if ((wordRom == null || wordRom.isEmpty()) && rLine != null && rLine.hasWords() && wi < rLine.words().size()) {
+                wordRom = rLine.words().get(wi).romaji();
+            }
+            timings.add(new WordTiming(start, end, word.startMs(), word.endMs(), wordRom));
             offset = end;
         }
         for (int i = 1; i < timings.size(); i++) {
@@ -3200,12 +3212,6 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         String s = cleanJapaneseQuotes(stripParentheses(raw)).trim();
         if (s.isEmpty()) {
             return "";
-        }
-        if (hasCjk(s) && LyricsRomanizer.isPureKana(s)) {
-            String off = LyricsRomanizer.romanizeKana(s);
-            if (off != null && !off.isEmpty()) {
-                s = off;
-            }
         }
         return s.replaceAll("\\s+", " ").trim();
     }
@@ -3312,93 +3318,87 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                     rawRoma = r;
                 }
             }
-            if (rawRoma.isEmpty() && LyricsRomanizer.isPureKana(rawText)) {
-                String off = LyricsRomanizer.romanizeKana(rawText);
-                if (off != null && !off.isEmpty() && !hasCjk(off)) {
-                    rawRoma = off.trim();
-                }
-            }
             normRoma = normalizeRomajiText(rawRoma).trim();
         }
 
         // 1. Japanese lines
         if (LyricsRomanizer.containsJapanese(rawText) || (LyricsRomanizer.isSongJapanese() && containsKanji(rawText))) {
-            List<LyricsRomanizer.JapaneseSegment> segments = LyricsRomanizer.segmentJapaneseLine(rawText);
-            List<String> readings = (needsRoma && !segments.isEmpty())
-                    ? LyricsRomanizer.alignJapaneseSegments(segments, normRoma)
-                    : Collections.emptyList();
+            if (!hasTimings || mainTimings == null || mainTimings.size() <= 1) {
+                List<LyricsRomanizer.JapaneseSegment> segments = LyricsRomanizer.segmentJapaneseLine(rawText);
+                List<String> readings = (needsRoma && !segments.isEmpty())
+                        ? LyricsRomanizer.alignJapaneseSegments(segments, normRoma)
+                        : Collections.emptyList();
 
-            List<LyricsLineView.WordUnit> units = new ArrayList<>();
+                List<LyricsLineView.WordUnit> units = new ArrayList<>();
 
-            int s = 0;
-            while (s < segments.size()) {
-                LyricsRomanizer.JapaneseSegment seg = segments.get(s);
-                int endS = s;
-                // Merge kanji + okurigana into single WordUnit (e.g. 喜 + んで -> 喜んで, 差 + し -> 差し)
-                while (endS + 1 < segments.size()) {
-                    LyricsRomanizer.JapaneseSegment cur = segments.get(endS);
-                    LyricsRomanizer.JapaneseSegment nxt = segments.get(endS + 1);
-                    boolean noSpace = (cur.end == nxt.start) && (cur.end >= rawText.length() || !Character.isWhitespace(rawText.charAt(cur.end)));
-                    if (!noSpace) {
-                        break;
-                    }
-                    if ((containsKanji(cur.text) || isOkurigana(cur.text)) && !nxt.isParticle && isOkurigana(nxt.text)) {
-                        endS++;
-                    } else if (nxt.isParticle && !hasTimingStartingAt(nxt.start, mainTimings)) {
-                        endS++;
-                    } else {
-                        break;
-                    }
-                }
-
-                int mStart = seg.start;
-                int mEnd = segments.get(endS).end;
-                String kanji = rawText.substring(mStart, mEnd);
-                String rom = needsRoma ? getJapaneseRomajiForRange(rawText, mStart, mEnd, segments, readings) : "";
-
-                long startMs = LyricsLine.NO_TIME;
-                long endMs = LyricsLine.NO_TIME;
-
-                if (hasTimings) {
-                    for (int ti = 0; ti < mainTimings.size(); ti++) {
-                        WordTiming wt = mainTimings.get(ti);
-                        if (wt.end() > mStart && wt.start() < mEnd) {
-                            if (wt.startMs() != LyricsLine.NO_TIME && wt.endMs() != LyricsLine.NO_TIME) {
-                                long sMs;
-                                long eMs;
-                                if (wt.start() <= mStart && wt.end() >= mEnd) {
-                                    // wt covers the entire segment (or multiple segments)
-                                    long totalDuration = wt.endMs() - wt.startMs();
-                                    int totalChars = Math.max(1, wt.end() - wt.start());
-                                    sMs = wt.startMs() + (totalDuration * (mStart - wt.start())) / totalChars;
-                                    eMs = wt.startMs() + (totalDuration * (mEnd - wt.start())) / totalChars;
-                                } else {
-                                    // wt is within this segment or overlaps part of it (e.g. per-mora timings)
-                                    sMs = wt.startMs();
-                                    eMs = wt.endMs();
-                                }
-                                startMs = (startMs == LyricsLine.NO_TIME) ? sMs : Math.min(startMs, sMs);
-                                endMs = (endMs == LyricsLine.NO_TIME) ? eMs : Math.max(endMs, eMs);
-                            }
+                int s = 0;
+                while (s < segments.size()) {
+                    LyricsRomanizer.JapaneseSegment seg = segments.get(s);
+                    int endS = s;
+                    // Merge kanji + okurigana into single WordUnit (e.g. 喜 + んで -> 喜んで, 差 + し -> 差し)
+                    while (endS + 1 < segments.size()) {
+                        LyricsRomanizer.JapaneseSegment cur = segments.get(endS);
+                        LyricsRomanizer.JapaneseSegment nxt = segments.get(endS + 1);
+                        boolean noSpace = (cur.end == nxt.start) && (cur.end >= rawText.length() || !Character.isWhitespace(rawText.charAt(cur.end)));
+                        if (!noSpace) {
+                            break;
+                        }
+                        if ((containsKanji(cur.text) || isOkurigana(cur.text)) && !nxt.isParticle && isOkurigana(nxt.text)) {
+                            endS++;
+                        } else if (nxt.isParticle && !hasTimingStartingAt(nxt.start, mainTimings)) {
+                            endS++;
+                        } else {
+                            break;
                         }
                     }
-                    if (startMs == LyricsLine.NO_TIME || endMs == LyricsLine.NO_TIME) {
-                        startMs = getInterpolatedCharTimeMs(mStart, false, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
-                        endMs = getInterpolatedCharTimeMs(mEnd, true, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
+
+                    int mStart = seg.start;
+                    int mEnd = segments.get(endS).end;
+                    String kanji = rawText.substring(mStart, mEnd);
+                    String rom = needsRoma ? getJapaneseRomajiForRange(rawText, mStart, mEnd, segments, readings) : "";
+
+                    long startMs = LyricsLine.NO_TIME;
+                    long endMs = LyricsLine.NO_TIME;
+
+                    if (hasTimings) {
+                        for (int ti = 0; ti < mainTimings.size(); ti++) {
+                            WordTiming wt = mainTimings.get(ti);
+                            if (wt.end() > mStart && wt.start() < mEnd) {
+                                if (wt.startMs() != LyricsLine.NO_TIME && wt.endMs() != LyricsLine.NO_TIME) {
+                                    long sMs;
+                                    long eMs;
+                                    if (wt.start() <= mStart && wt.end() >= mEnd) {
+                                        long totalDuration = wt.endMs() - wt.startMs();
+                                        int totalChars = Math.max(1, wt.end() - wt.start());
+                                        sMs = wt.startMs() + (totalDuration * (mStart - wt.start())) / totalChars;
+                                        eMs = wt.startMs() + (totalDuration * (mEnd - wt.start())) / totalChars;
+                                    } else {
+                                        sMs = wt.startMs();
+                                        eMs = wt.endMs();
+                                    }
+                                    startMs = (startMs == LyricsLine.NO_TIME) ? sMs : Math.min(startMs, sMs);
+                                    endMs = (endMs == LyricsLine.NO_TIME) ? eMs : Math.max(endMs, eMs);
+                                }
+                            }
+                        }
+                        if (startMs == LyricsLine.NO_TIME || endMs == LyricsLine.NO_TIME) {
+                            startMs = getInterpolatedCharTimeMs(mStart, false, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
+                            endMs = getInterpolatedCharTimeMs(mEnd, true, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
+                        }
+                        if (startMs != LyricsLine.NO_TIME && endMs != LyricsLine.NO_TIME && endMs <= startMs) {
+                            endMs = startMs + 1L;
+                        }
                     }
-                    if (startMs != LyricsLine.NO_TIME && endMs != LyricsLine.NO_TIME && endMs <= startMs) {
-                        endMs = startMs + 1L;
-                    }
+
+                    boolean space = (mEnd < rawText.length() && Character.isWhitespace(rawText.charAt(mEnd)));
+                    units.add(new LyricsLineView.WordUnit(kanji, rom, startMs, endMs, space));
+                    s = endS + 1;
                 }
 
-                boolean space = (mEnd < rawText.length() && Character.isWhitespace(rawText.charAt(mEnd)));
-                units.add(new LyricsLineView.WordUnit(kanji, rom, startMs, endMs, space));
-                s = endS + 1;
-            }
-
-            if (!units.isEmpty()) {
-                ensureDistinctTimestamps(units);
-                return units;
+                if (!units.isEmpty()) {
+                    ensureDistinctTimestamps(units);
+                    return units;
+                }
             }
         }
 
@@ -3432,13 +3432,25 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 if (needsRoma) {
                     if (LyricsRomanizer.isPurelyLatinScript(word)) {
                         rom = "";
-                    } else if (tokenCountMatches && wordIdx < romaTokens.length) {
-                        rom = romaTokens[wordIdx];
-                    } else if (romaTokens != null && wordIdx < romaTokens.length) {
-                        rom = romaTokens[wordIdx];
-                    }
-                    if (!rom.isEmpty()) {
-                        rom = normalizeRomajiText(rom).trim();
+                    } else {
+                        if (hasTimings) {
+                            for (WordTiming wt : mainTimings) {
+                                if (wt.end() > wStart && wt.start() < wEnd && wt.romaji() != null && !wt.romaji().isEmpty()) {
+                                    rom = wt.romaji();
+                                    break;
+                                }
+                            }
+                        }
+                        if (rom.isEmpty() && wordIdx < mainTimings.size() && mainTimings.get(wordIdx).romaji() != null && !mainTimings.get(wordIdx).romaji().isEmpty()) {
+                            rom = mainTimings.get(wordIdx).romaji();
+                        } else if (rom.isEmpty() && tokenCountMatches && wordIdx < romaTokens.length) {
+                            rom = romaTokens[wordIdx];
+                        } else if (rom.isEmpty() && romaTokens != null && wordIdx < romaTokens.length) {
+                            rom = romaTokens[wordIdx];
+                        }
+                        if (!rom.isEmpty()) {
+                            rom = normalizeRomajiText(rom).trim();
+                        }
                     }
                 }
 
@@ -3471,6 +3483,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 }
 
                 units.add(new LyricsLineView.WordUnit(word, rom, startMs, endMs, true));
+                wordIdx++;
             }
             if (!units.isEmpty()) {
                 ensureDistinctTimestamps(units);
@@ -3506,11 +3519,21 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 if (needsRoma) {
                     if (LyricsRomanizer.isPurelyLatinScript(ch)) {
                         r = "";
-                    } else if (romaTokens != null && charIdx < romaTokens.length) {
-                        r = romaTokens[charIdx];
-                    }
-                    if (!r.isEmpty()) {
-                        r = normalizeRomajiText(r).trim();
+                    } else {
+                        if (hasTimings) {
+                            for (WordTiming wt : mainTimings) {
+                                if (wt.end() > chStart && wt.start() < chEnd && wt.romaji() != null && !wt.romaji().isEmpty()) {
+                                    r = wt.romaji();
+                                    break;
+                                }
+                            }
+                        }
+                        if (r.isEmpty() && romaTokens != null && charIdx < romaTokens.length) {
+                            r = romaTokens[charIdx];
+                        }
+                        if (!r.isEmpty()) {
+                            r = normalizeRomajiText(r).trim();
+                        }
                     }
                 }
                 charIdx++;
@@ -3583,13 +3606,25 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 if (needsRoma) {
                     if (LyricsRomanizer.isPurelyLatinScript(word)) {
                         rom = "";
-                    } else if (tokenCountMatches && wordIdx < romaTokens.length) {
-                        rom = romaTokens[wordIdx];
-                    } else if (romaTokens != null && wordIdx < romaTokens.length) {
-                        rom = romaTokens[wordIdx];
-                    }
-                    if (!rom.isEmpty()) {
-                        rom = normalizeRomajiText(rom).trim();
+                    } else {
+                        if (hasTimings) {
+                            for (WordTiming wt : mainTimings) {
+                                if (wt.end() > wStart && wt.start() < wEnd && wt.romaji() != null && !wt.romaji().isEmpty()) {
+                                    rom = wt.romaji();
+                                    break;
+                                }
+                            }
+                        }
+                        if (rom.isEmpty() && wordIdx < mainTimings.size() && mainTimings.get(wordIdx).romaji() != null && !mainTimings.get(wordIdx).romaji().isEmpty()) {
+                            rom = mainTimings.get(wordIdx).romaji();
+                        } else if (rom.isEmpty() && tokenCountMatches && wordIdx < romaTokens.length) {
+                            rom = romaTokens[wordIdx];
+                        } else if (rom.isEmpty() && romaTokens != null && wordIdx < romaTokens.length) {
+                            rom = romaTokens[wordIdx];
+                        }
+                        if (!rom.isEmpty()) {
+                            rom = normalizeRomajiText(rom).trim();
+                        }
                     }
                 }
 
@@ -3662,13 +3697,25 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 if (needsRoma) {
                     if (LyricsRomanizer.isPurelyLatinScript(word)) {
                         rom = "";
-                    } else if (tokenCountMatches && wordIdx < romaTokens.length) {
-                        rom = romaTokens[wordIdx];
-                    } else if (romaTokens != null && wordIdx < romaTokens.length) {
-                        rom = romaTokens[wordIdx];
-                    }
-                    if (!rom.isEmpty()) {
-                        rom = normalizeRomajiText(rom).trim();
+                    } else {
+                        if (hasTimings) {
+                            for (WordTiming wt : mainTimings) {
+                                if (wt.end() > wStart && wt.start() < wEnd && wt.romaji() != null && !wt.romaji().isEmpty()) {
+                                    rom = wt.romaji();
+                                    break;
+                                }
+                            }
+                        }
+                        if (rom.isEmpty() && wordIdx < mainTimings.size() && mainTimings.get(wordIdx).romaji() != null && !mainTimings.get(wordIdx).romaji().isEmpty()) {
+                            rom = mainTimings.get(wordIdx).romaji();
+                        } else if (rom.isEmpty() && tokenCountMatches && wordIdx < romaTokens.length) {
+                            rom = romaTokens[wordIdx];
+                        } else if (rom.isEmpty() && romaTokens != null && wordIdx < romaTokens.length) {
+                            rom = romaTokens[wordIdx];
+                        }
+                        if (!rom.isEmpty()) {
+                            rom = normalizeRomajiText(rom).trim();
+                        }
                     }
                 }
 
@@ -3739,7 +3786,8 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                             long uStart = getInterpolatedCharTimeMs(cursor, false, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
                             long uEnd = getInterpolatedCharTimeMs(sIdx, true, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
                             boolean uSpace = (sIdx < rawText.length() && Character.isWhitespace(rawText.charAt(sIdx)));
-                            units.add(new LyricsLineView.WordUnit(untimed.trim(), "", uStart, uEnd, uSpace));
+                            String uRom = "";
+                            units.add(new LyricsLineView.WordUnit(untimed.trim(), uRom, uStart, uEnd, uSpace));
                         }
                     } else if (!units.isEmpty() && untimed.contains(" ")) {
                         units.get(units.size() - 1).endsWithSpace = true;
@@ -3773,23 +3821,33 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                     eMs = sMs + 150L;
                 }
 
+                String itemRom = "";
+                if (needsRoma) {
+                    if (wt.romaji() != null && !wt.romaji().isEmpty()) {
+                        itemRom = normalizeRomajiText(wt.romaji()).trim();
+                    }
+                }
+
                 if (text.contains(" ")) {
                     String[] parts = text.split("\\s+");
                     int partChars = 0;
                     for (String p : parts) partChars += p.length();
                     long totalDur = eMs - sMs;
                     long curPartStart = sMs;
+                    String[] romParts = (!itemRom.isEmpty() && itemRom.contains(" ")) ? itemRom.split("\\s+") : null;
                     for (int pIdx = 0; pIdx < parts.length; pIdx++) {
                         String part = parts[pIdx];
                         if (part.isEmpty()) continue;
                         long partDur = (partChars > 0) ? (totalDur * part.length() / partChars) : (totalDur / parts.length);
                         long partEnd = (pIdx == parts.length - 1) ? eMs : (curPartStart + partDur);
                         boolean pSpace = (pIdx < parts.length - 1) || space;
-                        units.add(new LyricsLineView.WordUnit(part, "", curPartStart, partEnd, pSpace));
+                        String partRom = (romParts != null && pIdx < romParts.length) ? romParts[pIdx]
+                                : (pIdx == 0 && romParts == null ? itemRom : "");
+                        units.add(new LyricsLineView.WordUnit(part, partRom, curPartStart, partEnd, pSpace));
                         curPartStart = partEnd;
                     }
                 } else {
-                    units.add(new LyricsLineView.WordUnit(text, "", sMs, eMs, space));
+                    units.add(new LyricsLineView.WordUnit(text, itemRom, sMs, eMs, space));
                 }
                 cursor = eIdx;
             }
@@ -3804,7 +3862,8 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                     } else {
                         long uStart = getInterpolatedCharTimeMs(cursor, false, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
                         long uEnd = getInterpolatedCharTimeMs(rawText.length(), true, mainTimings, rawText.length(), line.startTimeMs(), line.endTimeMs());
-                        units.add(new LyricsLineView.WordUnit(trailing.trim(), "", uStart, uEnd, false));
+                        String uRom = "";
+                        units.add(new LyricsLineView.WordUnit(trailing.trim(), uRom, uStart, uEnd, false));
                     }
                 }
             }
@@ -3948,14 +4007,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 romanization = roma;
             }
         }
-        if (!hasWordUnits && romanization == null && Settings.LYRICS_ROMANIZE.get()) {
-            if (LyricsRomanizer.isPureKana(originalTrimmed)) {
-                String off = LyricsRomanizer.romanizeKana(originalTrimmed);
-                if (off != null && !off.isEmpty() && !off.equalsIgnoreCase(originalTrimmed)) {
-                    romanization = off;
-                }
-            }
-        }
+
 
         List<String> translated = translatedLines;
         String translation = null;

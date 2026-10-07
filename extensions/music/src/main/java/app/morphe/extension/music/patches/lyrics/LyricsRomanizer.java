@@ -20,9 +20,19 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
+import org.json.JSONArray;
+
 import app.morphe.extension.music.patches.lyrics.requests.LyricsRequests;
 import app.morphe.extension.music.settings.Settings;
+import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
+import app.morphe.extension.shared.requests.Requester;
 import app.morphe.extension.shared.translation.TextTranslator;
 
 public final class LyricsRomanizer {
@@ -148,6 +158,133 @@ public final class LyricsRomanizer {
         return containsKanji(text);
     }
 
+    public static boolean containsGreek(@Nullable CharSequence text) {
+        if (text == null || text.length() == 0) return false;
+        for (int i = 0; i < text.length(); ) {
+            int cp = Character.codePointAt(text, i);
+            i += Character.charCount(cp);
+            if (Character.UnicodeScript.of(cp) == Character.UnicodeScript.GREEK) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean containsHebrew(@Nullable CharSequence text) {
+        if (text == null || text.length() == 0) return false;
+        for (int i = 0; i < text.length(); ) {
+            int cp = Character.codePointAt(text, i);
+            i += Character.charCount(cp);
+            if (Character.UnicodeScript.of(cp) == Character.UnicodeScript.HEBREW) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean containsDevanagari(@Nullable CharSequence text) {
+        if (text == null || text.length() == 0) return false;
+        for (int i = 0; i < text.length(); ) {
+            int cp = Character.codePointAt(text, i);
+            i += Character.charCount(cp);
+            if (Character.UnicodeScript.of(cp) == Character.UnicodeScript.DEVANAGARI) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean containsThai(@Nullable CharSequence text) {
+        if (text == null || text.length() == 0) return false;
+        for (int i = 0; i < text.length(); ) {
+            int cp = Character.codePointAt(text, i);
+            i += Character.charCount(cp);
+            if (Character.UnicodeScript.of(cp) == Character.UnicodeScript.THAI) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @NonNull
+    public static String detectLanguageContext(@Nullable Lyrics lyrics, @Nullable TrackInfo track) {
+        StringBuilder allText = new StringBuilder();
+        if (track != null) {
+            if (track.title() != null) allText.append(track.title()).append(' ');
+            if (track.artist() != null) allText.append(track.artist()).append(' ');
+        }
+        if (lyrics != null && lyrics.lines() != null) {
+            for (LyricsLine line : lyrics.lines()) {
+                if (line.text() != null) allText.append(line.text()).append(' ');
+            }
+        }
+
+        CharSequence seq = allText;
+        int hangulCount = 0;
+        int kanaCount = 0;
+        int cyrillicCount = 0;
+        int hanziCount = 0;
+        int arabicCount = 0;
+        int hebrewCount = 0;
+        int devanagariCount = 0;
+        int thaiCount = 0;
+        int greekCount = 0;
+
+        for (int i = 0; i < seq.length(); ) {
+            int cp = Character.codePointAt(seq, i);
+            i += Character.charCount(cp);
+            Character.UnicodeScript script = Character.UnicodeScript.of(cp);
+            if (script == Character.UnicodeScript.HANGUL) {
+                hangulCount++;
+            } else if (script == Character.UnicodeScript.HIRAGANA || script == Character.UnicodeScript.KATAKANA) {
+                kanaCount++;
+            } else if (script == Character.UnicodeScript.CYRILLIC) {
+                cyrillicCount++;
+            } else if (script == Character.UnicodeScript.HAN) {
+                hanziCount++;
+            } else if (script == Character.UnicodeScript.ARABIC) {
+                arabicCount++;
+            } else if (script == Character.UnicodeScript.HEBREW) {
+                hebrewCount++;
+            } else if (script == Character.UnicodeScript.DEVANAGARI) {
+                devanagariCount++;
+            } else if (script == Character.UnicodeScript.THAI) {
+                thaiCount++;
+            } else if (script == Character.UnicodeScript.GREEK) {
+                greekCount++;
+            }
+        }
+
+        if (hebrewCount > 0 && hebrewCount >= arabicCount && hebrewCount >= kanaCount && hebrewCount >= hangulCount && hebrewCount >= hanziCount && hebrewCount >= cyrillicCount) {
+            return "hebrew";
+        }
+        if (devanagariCount > 0 && devanagariCount >= arabicCount && devanagariCount >= kanaCount && devanagariCount >= hangulCount && devanagariCount >= hanziCount && devanagariCount >= cyrillicCount) {
+            return "devanagari";
+        }
+        if (thaiCount > 0 && thaiCount >= arabicCount && thaiCount >= kanaCount && thaiCount >= hangulCount && thaiCount >= hanziCount && thaiCount >= cyrillicCount) {
+            return "thai";
+        }
+        if (greekCount > 0 && greekCount >= arabicCount && greekCount >= kanaCount && greekCount >= hangulCount && greekCount >= hanziCount && greekCount >= cyrillicCount) {
+            return "greek";
+        }
+        if (arabicCount > 0 && arabicCount >= kanaCount && arabicCount >= hangulCount && arabicCount >= hanziCount && arabicCount >= cyrillicCount) {
+            return "arabic";
+        }
+        if (hangulCount > 0 && hangulCount >= kanaCount) {
+            return "korean";
+        }
+        if (kanaCount > 0) {
+            return "japanese";
+        }
+        if (hanziCount > 0 && kanaCount == 0) {
+            return "chinese";
+        }
+        if (cyrillicCount > 0) {
+            return "cyrillic";
+        }
+        return "unknown";
+    }
+
     public static void romanize(TrackInfo track, Lyrics lyrics, String source, Callback callback) {
         romanize(track, lyrics, source, false, callback);
     }
@@ -156,20 +293,12 @@ public final class LyricsRomanizer {
                                 boolean forceFullTransliteration, Callback callback) {
         Utils.verifyOnMainThread();
 
-        boolean hasJap = false;
-        if (lyrics != null && lyrics.lines() != null) {
-            for (LyricsLine line : lyrics.lines()) {
-                if (containsJapanese(line.text())) {
-                    hasJap = true;
-                    break;
-                }
-            }
-        }
-        currentSongIsJapanese = hasJap;
+        final String langContext = detectLanguageContext(lyrics, track);
+        currentSongIsJapanese = "japanese".equals(langContext);
 
         List<LyricsLine> embedded = forceFullTransliteration ? null : getEmbeddedRomanization(lyrics);
-        final boolean perWord = !forceFullTransliteration && LyricsMerge.anyWordHasRomaji(lyrics.lines());
-        final boolean degraded = !forceFullTransliteration && isProviderRomajiDegraded(embedded, lyrics.lines(), perWord);
+        final boolean perWord = !forceFullTransliteration && LyricsMerge.anyWordHasRomaji(lyrics != null ? lyrics.lines() : null);
+        final boolean degraded = !forceFullTransliteration && isProviderRomajiDegraded(embedded, lyrics != null ? lyrics.lines() : null, perWord);
 
         // Always prioritize provider romaji if valid, not degraded, and not forced to transliterate.
         if (!forceFullTransliteration && !degraded && (LyricsMerge.hasText(embedded) || perWord)) {
@@ -178,24 +307,35 @@ public final class LyricsRomanizer {
             return;
         }
 
-        List<String> lines = new ArrayList<>(lyrics.lines().size());
-        for (LyricsLine line : lyrics.lines()) {
-            String text = line.text();
-            lines.add(text != null ? cleanJapaneseQuotes(stripParentheses(text)).trim() : "");
+        boolean anyLineHasWords = false;
+        if (lyrics != null && lyrics.lines() != null) {
+            for (LyricsLine l : lyrics.lines()) {
+                if (l.hasWords()) {
+                    anyLineHasWords = true;
+                    break;
+                }
+            }
+        }
+        final boolean isWordSynced = anyLineHasWords;
+
+        List<String> lines = new ArrayList<>(lyrics != null && lyrics.lines() != null ? lyrics.lines().size() : 0);
+        if (lyrics != null && lyrics.lines() != null) {
+            for (LyricsLine line : lyrics.lines()) {
+                String text = line.text();
+                lines.add(text != null ? cleanJapaneseQuotes(stripParentheses(text)).trim() : "");
+            }
         }
 
         executor.execute(() -> {
             try {
                 String provider = Settings.LYRICS_ROMANIZATION_PROVIDER.get().toLowerCase(Locale.ROOT);
-                boolean useAiSetting = Settings.LYRICS_USE_AI_TRANSLATION.get();
+                boolean isAi = "gemini".equals(provider) || "openrouter".equals(provider)
+                        || "openai".equals(provider) || "openai_compatible".equals(provider);
 
-                if (!"google".equals(provider) || useAiSetting) {
-                    final String effectiveProvider = ("google".equals(provider) && useAiSetting)
-                            ? "openai_compatible"
-                            : provider;
+                if (isAi) {
+                    final String effectiveProvider = provider;
 
-                    List<LyricsLine> aiCached = LyricsCache.getRomanizationAI(
-                            track, source, lines);
+                    List<LyricsLine> aiCached = LyricsCache.getRomanizationAI(track, source, lines);
                     if (aiCached != null) {
                         Utils.runOnMainThread(() -> callback.onRomanized(aiCached, false, true, effectiveProvider, false));
                         return;
@@ -253,48 +393,280 @@ public final class LyricsRomanizer {
                     }
                 }
 
-                List<LyricsLine> romanized = LyricsCache.getRomanization(track, source, lines);
-                if (romanized == null) {
-                    List<String> romanizedText = romanizeOnline(lines);
-                    if (romanizedText != null) {
-                        List<String> repaired = new ArrayList<>(lines.size());
-                        for (int i = 0; i < lines.size(); i++) {
-                            String orig = lines.get(i);
-                            String roma = (i < romanizedText.size()) ? romanizedText.get(i) : "";
-                            if (needsRomanization(orig) && (roma.isEmpty() || hasCjk(roma) || !isPurelyLatinScript(roma))) {
-                                if (isPureKana(orig)) {
-                                    roma = romanizeKana(orig);
-                                }
-                            }
-                            repaired.add(roma);
+                List<LyricsLine> romanized = null;
+                if (isWordSynced) {
+                    romanized = romanizeWordSynced(lyrics);
+                } else {
+                    romanized = LyricsCache.getRomanization(track, source, lines);
+                    if (romanized == null) {
+                        romanized = romanizeLineSynced(lyrics);
+                        if (romanized != null && LyricsMerge.hasText(romanized)) {
+                            LyricsCache.putRomanization(track, source, lines, romanized);
                         }
-                        romanized = toLines(repaired);
-                        LyricsCache.putRomanization(track, source, lines, romanized);
-                    }
-                }
-
-                if (romanized == null) {
-                    List<String> fallbackResult = new ArrayList<>(lines.size());
-                    boolean anyConverted = false;
-                    for (String l : lines) {
-                        if (isPureKana(l)) {
-                            fallbackResult.add(romanizeKana(l));
-                            anyConverted = true;
-                        } else {
-                            fallbackResult.add(l);
-                        }
-                    }
-                    if (anyConverted) {
-                        romanized = toLines(fallbackResult);
                     }
                 }
 
                 List<LyricsLine> result = romanized;
-                Utils.runOnMainThread(() -> callback.onRomanized(result, result != null, false, null, false));
+                boolean hasResult = result != null && LyricsMerge.hasText(result);
+                Utils.runOnMainThread(() -> callback.onRomanized(result, hasResult, false, null, isWordSynced));
             } catch (Throwable ignored) {
                 Utils.runOnMainThread(() -> callback.onRomanized(null, false, false, null, false));
             }
         });
+    }
+
+    @NonNull
+    public static List<LyricsLine> romanizeWordSynced(@NonNull Lyrics lyrics) {
+        if (lyrics.lines() == null) return Collections.emptyList();
+
+        List<LyricsLine> origLines = lyrics.lines();
+        List<String> allLines = new ArrayList<>(origLines.size());
+        List<String> allSyllables = new ArrayList<>();
+        int[] lineStructure = new int[origLines.size()];
+
+        for (int i = 0; i < origLines.size(); i++) {
+            LyricsLine line = origLines.get(i);
+            String text = line.text() != null ? cleanJapaneseQuotes(stripParentheses(line.text())).trim() : "";
+            allLines.add(text);
+            List<Word> words = line.words();
+            lineStructure[i] = words.size();
+            for (Word w : words) {
+                allSyllables.add(w.text() != null ? w.text() : "");
+            }
+        }
+
+        List<String> fullLineResults = romanizeTexts(allLines);
+        List<String> isolatedResults = !allSyllables.isEmpty() ? romanizeTexts(allSyllables) : Collections.emptyList();
+
+        List<LyricsLine> resultLines = new ArrayList<>(origLines.size());
+        int globalSyllableIndex = 0;
+
+        for (int i = 0; i < origLines.size(); i++) {
+            LyricsLine line = origLines.get(i);
+            String fullLineRom = (i < fullLineResults.size() && fullLineResults.get(i) != null) ? fullLineResults.get(i) : "";
+            int count = lineStructure[i];
+            List<Word> origWords = line.words();
+
+            if (count == 0 || !line.hasWords()) {
+                resultLines.add(new LyricsLine(line.startTimeMs(), line.endTimeMs(),
+                        fullLineRom, Collections.emptyList(), line.agentId(), line.isDuet(), line.isBG(), line.songPart()));
+                continue;
+            }
+
+            int endSyllableIndex = Math.min(globalSyllableIndex + count, isolatedResults.size());
+            List<String> romanizedGuides = (globalSyllableIndex < isolatedResults.size())
+                    ? new ArrayList<>(isolatedResults.subList(globalSyllableIndex, endSyllableIndex))
+                    : new ArrayList<>();
+            while (romanizedGuides.size() < count) {
+                romanizedGuides.add("");
+            }
+
+            List<String> originalSyllables = new ArrayList<>(count);
+            for (Word w : origWords) {
+                originalSyllables.add(w.text() != null ? w.text() : "");
+            }
+
+            globalSyllableIndex += count;
+
+            List<String> alignedChunks = alignRomanizationAnchors(fullLineRom, romanizedGuides, originalSyllables);
+
+            List<Word> romanizedWords = new ArrayList<>(count);
+            StringBuilder lineRomBuilder = new StringBuilder();
+
+            for (int wIdx = 0; wIdx < count; wIdx++) {
+                Word w = origWords.get(wIdx);
+                String rom = (wIdx < alignedChunks.size() && alignedChunks.get(wIdx) != null) ? alignedChunks.get(wIdx) : "";
+                romanizedWords.add(new Word(w.startMs(), w.endMs(), w.text(), rom, w.endsWithSpace()));
+                lineRomBuilder.append(rom);
+            }
+
+            String finalLineRom = !fullLineRom.isEmpty() ? fullLineRom : lineRomBuilder.toString().trim();
+
+            resultLines.add(new LyricsLine(line.startTimeMs(), line.endTimeMs(),
+                    finalLineRom, romanizedWords, line.agentId(), line.isDuet(), line.isBG(), line.songPart()));
+        }
+
+        return resultLines;
+    }
+
+    @NonNull
+    public static List<LyricsLine> romanizeWordSynced(@NonNull Lyrics lyrics, @NonNull String langContext) {
+        return romanizeWordSynced(lyrics);
+    }
+
+    @NonNull
+    public static List<LyricsLine> romanizeLineSynced(@NonNull Lyrics lyrics) {
+        if (lyrics.lines() == null) return Collections.emptyList();
+
+        List<LyricsLine> origLines = lyrics.lines();
+        List<String> texts = new ArrayList<>(origLines.size());
+        for (LyricsLine l : origLines) {
+            String text = l.text();
+            texts.add(text != null ? cleanJapaneseQuotes(stripParentheses(text)).trim() : "");
+        }
+
+        List<String> romanizedResults = romanizeTexts(texts);
+
+        List<LyricsLine> result = new ArrayList<>(origLines.size());
+        for (int i = 0; i < origLines.size(); i++) {
+            LyricsLine origLine = origLines.get(i);
+            String origText = texts.get(i);
+            String roma = (i < romanizedResults.size() && romanizedResults.get(i) != null)
+                    ? romanizedResults.get(i) : origText;
+            if (roma.isEmpty()) {
+                roma = origText;
+            }
+
+            result.add(new LyricsLine(origLine.startTimeMs(), origLine.endTimeMs(),
+                    roma, Collections.emptyList(), origLine.agentId(), origLine.isDuet(), origLine.isBG(), origLine.songPart()));
+        }
+        return result;
+    }
+
+    @NonNull
+    public static List<LyricsLine> romanizeLineSynced(@NonNull Lyrics lyrics, @NonNull String langContext) {
+        return romanizeLineSynced(lyrics);
+    }
+
+    private static final int GOOGLE_MAX_RETRIES = 3;
+    private static final int GOOGLE_RETRY_DELAY_MS = 500;
+
+    @NonNull
+    public static List<String> romanizeTexts(@NonNull List<String> texts) {
+        List<Integer> validIndices = new ArrayList<>();
+        List<String> textsToFetch = new ArrayList<>();
+
+        for (int index = 0; index < texts.size(); index++) {
+            String text = texts.get(index);
+            if (text != null && !isPurelyLatinScript(text)) {
+                validIndices.add(index);
+                textsToFetch.add(text);
+            }
+        }
+
+        if (textsToFetch.isEmpty()) {
+            return texts;
+        }
+
+        final int BATCH_SIZE = 50;
+        Map<Integer, String> resultsMap = new HashMap<>();
+
+        for (int i = 0; i < textsToFetch.size(); i += BATCH_SIZE) {
+            int toIndex = Math.min(i + BATCH_SIZE, textsToFetch.size());
+            List<String> batch = textsToFetch.subList(i, toIndex);
+            StringBuilder batchTextBuilder = new StringBuilder();
+            for (int b = 0; b < batch.size(); b++) {
+                if (b > 0) batchTextBuilder.append('|');
+                batchTextBuilder.append(batch.get(b));
+            }
+            String batchText = batchTextBuilder.toString();
+
+            try {
+                String[] batchResultArray = fetchRomanizationWithRetry(batchText, 0);
+
+                for (int batchIndex = 0; batchIndex < batch.size(); batchIndex++) {
+                    String originalText = batch.get(batchIndex);
+                    int targetIndex = validIndices.get(i + batchIndex);
+                    if (batchResultArray != null && batchIndex < batchResultArray.length) {
+                        resultsMap.put(targetIndex, batchResultArray[batchIndex]);
+                    } else {
+                        resultsMap.put(targetIndex, originalText);
+                    }
+                }
+            } catch (Throwable e) {
+                Logger.printException(() -> "LyricsRomanizer: Batch failed", e);
+                for (int batchIndex = 0; batchIndex < batch.size(); batchIndex++) {
+                    int targetIndex = validIndices.get(i + batchIndex);
+                    resultsMap.put(targetIndex, batch.get(batchIndex));
+                }
+            }
+        }
+
+        List<String> result = new ArrayList<>(texts.size());
+        for (int index = 0; index < texts.size(); index++) {
+            String text = texts.get(index);
+            String mapped = resultsMap.get(index);
+            result.add(mapped != null ? mapped : (text != null ? text : ""));
+        }
+        return result;
+    }
+
+    private static String[] fetchRomanizationWithRetry(String text, int attempt) throws Exception {
+        try {
+            String encoded = URLEncoder.encode(text, "UTF-8");
+            String url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=rm&q=" + encoded;
+
+            HttpURLConnection conn;
+            if (encoded.length() > 2000) {
+                conn = Requester.openConnection("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=rm");
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+                conn.setDoOutput(true);
+                byte[] payload = ("q=" + encoded).getBytes(StandardCharsets.UTF_8);
+                conn.setFixedLengthStreamingMode(payload.length);
+                try (OutputStream stream = conn.getOutputStream()) {
+                    stream.write(payload);
+                }
+            } else {
+                conn = Requester.openConnection(url);
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+            }
+
+            int status = conn.getResponseCode();
+            if (status == 429) {
+                throw new IOException("Rate Limit Exceeded");
+            }
+            if (status != 200) {
+                throw new IOException("Google Translate error: HTTP " + status);
+            }
+
+            String jsonStr = Requester.parseStringAndDisconnect(conn);
+            JSONArray data = new JSONArray(jsonStr);
+
+            JSONArray segmentArray = data.optJSONArray(0);
+            StringBuilder fullRomanizedBuilder = new StringBuilder();
+            if (segmentArray != null) {
+                for (int s = 0; s < segmentArray.length(); s++) {
+                    JSONArray segment = segmentArray.optJSONArray(s);
+                    if (segment == null) continue;
+                    String part = segment.optString(3);
+                    if (part.isEmpty() || "null".equals(part)) {
+                        part = segment.optString(2);
+                    }
+                    if (part.isEmpty() || "null".equals(part)) {
+                        part = segment.optString(0);
+                    }
+                    if (!"null".equals(part)) {
+                        fullRomanizedBuilder.append(part);
+                    }
+                }
+            }
+
+            String fullRomanizedString = fullRomanizedBuilder.toString();
+            if (fullRomanizedString.isEmpty()) {
+                return text.split("\\|", -1);
+            }
+
+            return fullRomanizedString
+                    .replaceAll("\\s*\\|\\s*", "|")
+                    .split("\\|", -1);
+
+        } catch (Exception error) {
+            if (attempt < GOOGLE_MAX_RETRIES) {
+                long delay = (long) (GOOGLE_RETRY_DELAY_MS * Math.pow(2, attempt));
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ignored) {}
+                return fetchRomanizationWithRetry(text, attempt + 1);
+            }
+            throw error;
+        }
     }
 
     @Nullable
@@ -676,16 +1048,9 @@ public final class LyricsRomanizer {
         return result;
     }
 
-    @Nullable
-    private static List<String> romanizeOnline(List<String> lines) {
-        return LyricsMerge.mapLinesOnline(lines,
-                l -> {
-                    try {
-                        return TextTranslator.romanize(l);
-                    } catch (Exception ex) {
-                        throw new RuntimeException(ex);
-                    }
-                });
+    @NonNull
+    public static List<String> romanizeOnline(@NonNull List<String> lines) {
+        return romanizeTexts(lines);
     }
 
     public static String deviceLanguage() {
@@ -1685,7 +2050,8 @@ public final class LyricsRomanizer {
         m.put("バ", "ba"); m.put("ビ", "bi"); m.put("ブ", "bu"); m.put("ベ", "be"); m.put("ボ", "bo");
         m.put("パ", "pa"); m.put("ピ", "pi"); m.put("プ", "pu"); m.put("ペ", "pe"); m.put("ポ", "po");
         m.put("ァ", "a"); m.put("ィ", "i"); m.put("ゥ", "u"); m.put("ェ", "e"); m.put("ォ", "o");
-        m.put("ャ", "ya"); m.put("ュ", "yu"); m.put("ョ", "yo"); m.put("ヮ", "wa"); m.put("ヴ", "vu");
+        m.put("ャ", "ya"); m.put("ュ", "yu"); m.put("ョ", "yo"); m.put("ヮ", "wa");
+        m.put("ヴ", "vu");
         return Collections.unmodifiableMap(m);
     }
 
