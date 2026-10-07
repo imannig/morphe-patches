@@ -530,10 +530,6 @@ YouTube Music 8.x - плавний перехід працює лише на в�
   <string name="morphe_music_lyrics_saved">Збережено</string>
   <string name="morphe_music_lyrics_word_sync_title">Підсвічувати синхронізовані слова або склади</string>
   <string name="morphe_music_lyrics_word_sync_summary">Надавати пріоритет тексту пісні по словах, коли доступно. Якщо текст пісні містить синхронізацію по словах, підсвічує кожне слово або склад у такт музиці</string>
-  <string name="morphe_music_lyrics_hide_played_title">Приховувати відтворені рядки тексту</string>
-  <string name="morphe_music_lyrics_hide_played_summary">Приховувати рядки тексту пісні над рядком, що зараз відтворюється</string>
-  <string name="morphe_music_lyrics_hide_unplayed_title">Приховувати ще не відтворені рядки тексту</string>
-  <string name="morphe_music_lyrics_hide_unplayed_summary">Приховувати рядки тексту пісні під рядком, що зараз відтворюється</string>
   <string name="morphe_music_lyrics_mediasession_title">Показувати текст пісні MediaSession на екрані блокування</string>
   <string name="morphe_music_lyrics_miniplayer_title">Показувати текст пісні в мініплеєрі</string>
   <string name="morphe_music_lyrics_display_artist_first_title">Порядок відображення виконавця та назви</string>

@@ -523,10 +523,6 @@ YouTube Music 8.x — クロスフェードは9.x以降でのみ実行されま�
   <string name="morphe_music_lyrics_saved">保存しました</string>
   <string name="morphe_music_lyrics_word_sync_title">同期された単語または音節をハイライト</string>
   <string name="morphe_music_lyrics_word_sync_summary">利用可能な場合は単語ごとの歌詞を優先します。歌詞に単語タイミングがある場合、音楽に合わせて各単語または音節をハイライトします</string>
-  <string name="morphe_music_lyrics_hide_played_title">再生済み […] 行を非表示</string>
-  <string name="morphe_music_lyrics_hide_played_summary">現在再生中の行より上の歌詞行を非表示にする</string>
-  <string name="morphe_music_lyrics_hide_unplayed_title">未再生の歌詞を非表示</string>
-  <string name="morphe_music_lyrics_hide_unplayed_summary">現在再生中の […] 画面より下の歌詞行を非表示</string>
   <string name="morphe_music_lyrics_mediasession_title">ロック画面に MediaSession の歌詞を表示する</string>
   <string name="morphe_music_lyrics_miniplayer_title">ミニプレイヤーの歌詞を表示</string>
   <string name="morphe_music_lyrics_display_artist_first_title">メディアセッションでアーティスト名とタイトルを表示[…] ON = \"アーティスト - タイトル\"、OFF = \"タイトル - アーティスト\" この設定は歌詞検索には影響しません</string>

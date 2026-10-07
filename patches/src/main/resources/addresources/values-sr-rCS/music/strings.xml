@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
 
     Strings with new lines must be raw strings where they're wrapped in quotes and new lines are not encoded.
@@ -520,10 +520,6 @@ Potrebni kolačići: SID, HSID, SSID, SAPISID, __Secure-3PAPISID, __Secure-1PAPI
   <string name="morphe_music_lyrics_saved">Tekst se traži po naslovu numere i izvođaču, […] Možete i da pritisnete dugme za osvežavanje da biste ručno promenili verzije. […] Svi omogućeni izvori se ne traže uvek po vašem redosledu, već odgovaraju prema svojoj brzini.</string>
   <string name="morphe_music_lyrics_word_sync_title">Istakni sinhronizovane reči ili slogove.</string>
   <string name="morphe_music_lyrics_word_sync_summary">Daj prednost tekstu reč po reč kada je dostupan.</string>
-  <string name="morphe_music_lyrics_hide_played_title">Sakrij odsvirane stihove.</string>
-  <string name="morphe_music_lyrics_hide_played_summary">Sakrij stihove iznad reda koji se trenutno pušta.</string>
-  <string name="morphe_music_lyrics_hide_unplayed_title">Sakrij neodsvirane stihove.</string>
-  <string name="morphe_music_lyrics_hide_unplayed_summary">Sakrij stihove ispod reda koji se trenutno pušta.</string>
   <string name="morphe_music_lyrics_mediasession_title">Prikaži MediaSession stihove na zaključanom ekranu.</string>
   <string name="morphe_music_lyrics_miniplayer_title">Prikaži stihove u mini plejeru.</string>
   <string name="morphe_music_lyrics_display_artist_first_title">Redosled prikaza izvođača i naslova.</string>
@@ -561,8 +557,6 @@ Potrebni kolačići: SID, HSID, SSID, SAPISID, __Secure-3PAPISID, __Secure-1PAPI
   <string name="morphe_music_lyrics_about_summary">"Tekstovi pesama se uparuju prema naslovu i izvođaču. Neuobičajeni metapodaci mogu dovesti do toga da se ne pronađe ništa ili pogrešna verzija. Koristite osvežavanje da biste promenili verzije. Provajderi označeni * zahtevaju token. Svi omogućeni provajderi se ne pozivaju uvek po vašem redosledu, već odgovaraju na osnovu svoje brzine."</string>
   <string name="morphe_music_lyrics_hide_info_title">Sakrij red s informacijama</string>
   <string name="morphe_music_lyrics_hide_info_summary">Sakrij red s informacijama prikazan ispod stihova.</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_title">Promeni redosled prikaza izvođača i naslova</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_summary">Promeni redosled prikaza izvođača i naslova</string>
   <string name="morphe_music_lyrics_use_ai_translation_title">OpenAI-kompatibilan prevod</string>
   <string name="morphe_music_lyrics_use_ai_translation_summary">Koristi prilagođeni OpenAI-kompatibilni API za prevođenje i romanizaciju umesto Google Translate</string>
   <string name="morphe_music_lyrics_ai_config_dialog_title">Podešavanja AI prevođenja</string>

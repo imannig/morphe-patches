@@ -226,6 +226,27 @@ final class MetadataCleaner {
     }
 
     @Nullable
+    static TrackInfo swapTitleAndArtist(TrackInfo track, @Nullable String rawTitle) {
+        if (rawTitle == null) {
+            return null;
+        }
+        int idx = rawTitle.indexOf(DASH_SEPARATOR);
+        if (idx <= 0 || idx >= rawTitle.length() - DASH_SEPARATOR.length()) {
+            return null;
+        }
+        String left = rawTitle.substring(0, idx).trim();
+        String right = rawTitle.substring(idx + DASH_SEPARATOR.length()).trim();
+        String swappedArtist = cleanArtist(right);
+        String swappedTitle = cleanTitle(left);
+        if (swappedArtist.isEmpty() || swappedTitle.isEmpty()) {
+            return null;
+        }
+        TrackInfo swapped = new TrackInfo(swappedTitle, swappedArtist, track.album(),
+                track.durationSeconds());
+        return swapped.equals(track) ? null : swapped;
+    }
+
+    @Nullable
     private static TrackInfo buildSplit(String title, String artist, String album,
                                         int durationSeconds) {
         if (title.isEmpty() || artist.isEmpty()) {

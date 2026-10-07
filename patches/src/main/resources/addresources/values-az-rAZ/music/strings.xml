@@ -530,10 +530,6 @@ Fon səsləndirmə zamanı analiz sinxronlaşdırılmasına əmin olmaq üçün 
   <string name="morphe_music_lyrics_saved">Saxlanıldı</string>
   <string name="morphe_music_lyrics_word_sync_title">Sinxronlaşdırılmış sözləri və ya hecaları vurğula</string>
   <string name="morphe_music_lyrics_word_sync_summary">Mümkün olduqda sözbəsöz sözlərə üstünlük verir. Sözlərdə zamanlama olduqda, musiqi ilə eyni vaxtda hər bir sözü və ya hecanı vurğulayır</string>
-  <string name="morphe_music_lyrics_hide_played_title">Oxudulan sözləri gizlət</string>
-  <string name="morphe_music_lyrics_hide_played_summary">Mövcud oxunan sətirdən yuxarıdakı söz sətirlərini gizlət</string>
-  <string name="morphe_music_lyrics_hide_unplayed_title">Oxudulmamış sözləri gizlət</string>
-  <string name="morphe_music_lyrics_hide_unplayed_summary">Mövcud oxunan sətirdən aşağıdakı söz sətirlərini gizlət</string>
   <string name="morphe_music_lyrics_mediasession_title">Kilid ekranında MediaSession Sözlərini göstər</string>
   <string name="morphe_music_lyrics_miniplayer_title">Kiçik Səsləndirici Sözlərini Göstər</string>
   <string name="morphe_music_lyrics_display_artist_first_title">İfaçı və Başlığın göstərilmə sırası</string>
