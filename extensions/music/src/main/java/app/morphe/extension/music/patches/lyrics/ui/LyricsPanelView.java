@@ -20,6 +20,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -2295,6 +2296,11 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
 
             switch (state) {
                 case LOADING:
+                    TrackInfo loadingTrack = LyricsManager.getInstance().getCurrentTrack();
+                    Bitmap loadingArt = LyricsManager.getInstance().getCurrentArtworkBitmap();
+                    dynamicBgView.setArtwork(loadingArt, VideoInformation.getVideoId(),
+                            loadingTrack != null ? loadingTrack.title() : null,
+                            loadingTrack != null ? loadingTrack.artist() : null);
                     if (lyrics != null && !lyrics.isEmpty()) {
                         if (topProgressBar != null) {
                             topProgressBar.setVisibility(VISIBLE);
@@ -2316,7 +2322,8 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                         }
                     } else {
                         TrackInfo track = LyricsManager.getInstance().getCurrentTrack();
-                        dynamicBgView.setVideoId(VideoInformation.getVideoId(),
+                        Bitmap art = LyricsManager.getInstance().getCurrentArtworkBitmap();
+                        dynamicBgView.setArtwork(art, VideoInformation.getVideoId(),
                                 track != null ? track.title() : null,
                                 track != null ? track.artist() : null);
 

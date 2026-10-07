@@ -6,15 +6,18 @@
 
 package app.morphe.extension.music.patches.lyrics.ui;
 
-import android.animation.ArgbEvaluator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
-import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
+import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
-import android.graphics.RadialGradient;
+import android.graphics.Rect;
 import android.graphics.Shader;
+import android.media.audiofx.Visualizer;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -30,64 +33,135 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import app.morphe.extension.music.patches.lyrics.LyricsManager;
 import app.morphe.extension.shared.Logger;
 
 /**
- * Animated multi-blob mesh gradient background.
- * Dynamically samples artwork colors and smoothly animates organic orbital gradients.
+ * Animated dynamic blurred background rendering multi-layer orbital artwork meshes
+ * with audio-reactive beat synchronization.
  */
 public final class DynamicBackgroundView extends View {
 
+    private static final int BUFFER_SIZE = 256;
+    private static final int BLUR_RADIUS = 14;
+    private static final float TWO_PI = (float) (Math.PI * 2.0);
+    private static final float ARTWORK_TRANSITION_SPEED = 0.02f;
+
+    private static final float ROTATION_POWER = 0.8f;
+    private static final float[] ROTATION_SPEEDS = new float[] { -0.10f, 0.18f, 0.32f };
+    private static final float[] INITIAL_ROTATIONS = new float[] { 0.3f, -2.1f, 2.4f };
+    private static final float[] LAYER_SCALES = new float[] { 1.4f, 1.26f, 1.26f };
+    private static final float[] PERIMETER_SPEEDS = new float[] { 0.09f, 0.012f, 0.02f };
+    private static final float[] PERIMETER_DIRECTION = new float[] { -1.0f, 1.0f, 1.0f };
+    private static final float[] LAYER_BASE_POSITIONS = new float[] { 0.0f, 0.0f, 0.75f, -0.75f, -0.75f, 0.75f };
+
+    private static final float[] BEAT_ROT_BOOST = new float[] { 0.28f, -0.18f, 0.02f };
+    private static final float[] BEAT_SPD_BOOST = new float[] { 0.8f, 0.2f, 0.5f };
+    private static final float[] BEAT_SCALE_BOOST = new float[] { 0.2f, 0.34f, 0.39f };
+    private static final float BEAT_SCALE_DECAY = 2.0f;
+
     private static final ExecutorService COLOR_EXECUTOR = Executors.newSingleThreadExecutor();
-    private static final ArgbEvaluator COLOR_EVALUATOR = new ArgbEvaluator();
-
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
+
+    private final Bitmap bufferBitmap;
+    private final Canvas bufferCanvas;
+    private final Bitmap blurBitmap;
+    private final int[] pixelsSrc = new int[BUFFER_SIZE * BUFFER_SIZE];
+    private final int[] pixelsDst = new int[BUFFER_SIZE * BUFFER_SIZE];
+    private final int[] pixelsTemp = new int[BUFFER_SIZE * BUFFER_SIZE];
+    private final Bitmap defaultArtwork;
+
+    private final Paint layerPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+    private final Paint postProcessPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG | Paint.ANTI_ALIAS_FLAG);
     private final Paint scrimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Rect screenRect = new Rect();
+    private final Matrix layerMatrix = new Matrix();
 
-    private int fromColorA = 0xFF2A4278;
-    private int fromColorB = 0xFF58236B;
-    private int fromColorC = 0xFF255B69;
-    private int fromBaseBgColor = 0xFF0D111A;
+    private LinearGradient scrimGradient;
+    private int lastGradientHeight = -1;
 
-    private int targetColorA = 0xFF2A4278;
-    private int targetColorB = 0xFF58236B;
-    private int targetColorC = 0xFF255B69;
-    private int targetBaseBgColor = 0xFF0D111A;
+    private final float[] layerPerimTime = new float[3];
+    private final float[] layerBeatScale = new float[3];
+    private final float[] layerBeatRot = new float[3];
+    private float beatEnergyBaseline = 0.0f;
 
-    private int currentColorA = targetColorA;
-    private int currentColorB = targetColorB;
-    private int currentColorC = targetColorC;
-    private int currentBaseBgColor = targetBaseBgColor;
+    private final float[] cachedLayerRots = new float[3];
+    private final float[] cachedLayerScales = new float[3];
+    private final float[] cachedLayerPosX = new float[3];
+    private final float[] cachedLayerPosY = new float[3];
 
-    private long transitionStartUptimeMs;
-    private static final long TRANSITION_DURATION_MS = 1000;
+    private float artworkTransitionProgress = 1.0f;
+    private long startTimeMs = 0L;
+    private long lastDrawTimeMs = 0L;
 
+    private float beatPulse = 0.0f;
+    private float visualizerPulse = 0.0f;
+    private Visualizer visualizer;
+
+    @Nullable
+    private Bitmap currentArtwork;
+    @Nullable
+    private Bitmap previousArtwork;
     @Nullable
     private String currentVideoId;
     private boolean isAttached;
 
     public DynamicBackgroundView(Context context) {
         super(context);
-        scrimPaint.setColor(0x32000000);
+        setWillNotDraw(false);
+
+        bufferBitmap = Bitmap.createBitmap(BUFFER_SIZE, BUFFER_SIZE, Bitmap.Config.ARGB_8888);
+        bufferCanvas = new Canvas(bufferBitmap);
+        blurBitmap = Bitmap.createBitmap(BUFFER_SIZE, BUFFER_SIZE, Bitmap.Config.ARGB_8888);
+
+        defaultArtwork = Bitmap.createBitmap(BUFFER_SIZE, BUFFER_SIZE, Bitmap.Config.ARGB_8888);
+        Canvas defCanvas = new Canvas(defaultArtwork);
+        defCanvas.drawColor(0xFF1E1E28);
+
+        currentArtwork = defaultArtwork;
+
+        postProcessPaint.setColorFilter(new ColorMatrixColorFilter(createPostProcessMatrix()));
     }
 
-    public void setVideoId(@Nullable String videoId, @Nullable String title, @Nullable String artist) {
-        if (Objects.equals(videoId, currentVideoId)) {
+    private static ColorMatrix createPostProcessMatrix() {
+        ColorMatrix satMatrix = new ColorMatrix();
+        satMatrix.setSaturation(3.0f);
+
+        // Contrast 0.95 and Brightness 0.70
+        ColorMatrix cbMatrix = new ColorMatrix();
+        float contrast = 0.95f;
+        float brightness = 0.70f;
+        float scale = brightness * contrast;
+        float translate = 0.5f * (1.0f - contrast) * 255.0f;
+        cbMatrix.set(new float[] {
+                scale, 0, 0, 0, translate,
+                0, scale, 0, 0, translate,
+                0, 0, scale, 0, translate,
+                0, 0, 0, 1, 0
+        });
+
+        ColorMatrix finalMatrix = new ColorMatrix();
+        finalMatrix.postConcat(satMatrix);
+        finalMatrix.postConcat(cbMatrix);
+        return finalMatrix;
+    }
+
+    /**
+     * Updates artwork directly from a memory bitmap (e.g. MediaMetadata) or video ID.
+     */
+    public void setArtwork(@Nullable Bitmap bitmap, @Nullable String videoId, @Nullable String title, @Nullable String artist) {
+        if (Objects.equals(videoId, currentVideoId) && bitmap == null && currentArtwork != null && currentArtwork != defaultArtwork) {
             return;
         }
         currentVideoId = videoId;
 
-        // Immediately update with a harmonious algorithmic fallback based on track name
-        int hash = (title != null ? title.hashCode() : 0) ^ (artist != null ? artist.hashCode() : 0);
-        float baseHue = Math.abs(hash % 360);
-        int fallbackA = Color.HSVToColor(new float[]{baseHue, 0.85f, 0.58f});
-        int fallbackB = Color.HSVToColor(new float[]{(baseHue + 55f) % 360f, 0.88f, 0.52f});
-        int fallbackC = Color.HSVToColor(new float[]{(baseHue + 115f) % 360f, 0.80f, 0.55f});
-        int fallbackBaseBg = Color.HSVToColor(new float[]{baseHue, 0.40f, 0.12f});
-        startColorTransition(fallbackA, fallbackB, fallbackC, fallbackBaseBg);
+        if (bitmap != null && !bitmap.isRecycled()) {
+            applyNewArtwork(bitmap);
+            return;
+        }
 
         if (videoId == null || videoId.isEmpty()) {
+            applyNewArtwork(defaultArtwork);
             return;
         }
 
@@ -102,79 +176,102 @@ public final class DynamicBackgroundView extends View {
                 conn.setDoInput(true);
                 conn.connect();
 
-                BitmapFactory.Options options = new BitmapFactory.Options();
-                options.inSampleSize = 8; // Downsample heavily for fast 32-60px palette sampling
                 try (InputStream is = conn.getInputStream()) {
-                    Bitmap bmp = BitmapFactory.decodeStream(is, null, options);
-                    if (bmp != null) {
-                        extractAndApplyPalette(bmp, targetVid);
-                        bmp.recycle();
+                    Bitmap downloaded = BitmapFactory.decodeStream(is);
+                    if (downloaded != null) {
+                        mainHandler.post(() -> {
+                            if (Objects.equals(currentVideoId, targetVid)) {
+                                applyNewArtwork(downloaded);
+                            } else {
+                                downloaded.recycle();
+                            }
+                        });
                     }
                 }
             } catch (Exception ex) {
-                Logger.printDebug(() -> "DynamicBackground: Failed to fetch thumbnail for palette", ex);
+                Logger.printDebug(() -> "DynamicBackground: Failed to fetch artwork thumbnail", ex);
             }
         });
     }
 
-    private void extractAndApplyPalette(@NonNull Bitmap bmp, @NonNull String targetVid) {
-        int w = bmp.getWidth();
-        int h = bmp.getHeight();
-        if (w <= 0 || h <= 0) return;
-
-        int p1 = bmp.getPixel(Math.min(w - 1, w / 4), Math.min(h - 1, h / 4));
-        int p2 = bmp.getPixel(Math.min(w - 1, w / 2), Math.min(h - 1, h / 2));
-        int p3 = bmp.getPixel(Math.min(w - 1, (3 * w) / 4), Math.min(h - 1, (3 * h) / 4));
-
-        int tunedA = tuneVibrancy(p1, 0.82f, 0.60f);
-        int tunedB = tuneVibrancy(p2, 0.88f, 0.55f);
-        int tunedC = tuneVibrancy(p3, 0.78f, 0.58f);
-
-        float[] hsv = new float[3];
-        Color.colorToHSV(tunedA, hsv);
-        int baseBg = Color.HSVToColor(new float[]{hsv[0], 0.40f, 0.12f});
-
-        mainHandler.post(() -> {
-            if (Objects.equals(currentVideoId, targetVid)) {
-                startColorTransition(tunedA, tunedB, tunedC, baseBg);
-            }
-        });
+    public void setVideoId(@Nullable String videoId, @Nullable String title, @Nullable String artist) {
+        setArtwork(null, videoId, title, artist);
     }
 
-    private static int tuneVibrancy(int color, float minSat, float targetVal) {
-        float[] hsv = new float[3];
-        Color.colorToHSV(color, hsv);
-        if (hsv[1] < 0.15f) {
-            // Low-saturation / monochrome artwork fallback: deep elegant dark ambient tone
-            hsv[0] = 220f; // Soft midnight blue hue
-            hsv[1] = 0.35f;
-            hsv[2] = 0.30f;
-            return Color.HSVToColor(hsv);
+    private void applyNewArtwork(@NonNull Bitmap newBmp) {
+        Bitmap normalized;
+        if (newBmp == defaultArtwork) {
+            normalized = defaultArtwork;
+        } else {
+            normalized = Bitmap.createScaledBitmap(newBmp, BUFFER_SIZE, BUFFER_SIZE, true);
         }
-        hsv[1] = Math.max(minSat, Math.min(0.95f, Math.max(0.78f, hsv[1] * 1.35f)));
-        hsv[2] = Math.max(targetVal, Math.min(0.65f, Math.max(0.52f, hsv[2] * 1.25f)));
-        return Color.HSVToColor(hsv);
+
+        if (previousArtwork != null && previousArtwork != currentArtwork && previousArtwork != defaultArtwork && !previousArtwork.isRecycled()) {
+            previousArtwork.recycle();
+        }
+        previousArtwork = currentArtwork;
+        currentArtwork = normalized;
+        artworkTransitionProgress = 0.0f;
+        postInvalidateOnAnimation();
     }
 
-    private void startColorTransition(int a, int b, int c, int baseBg) {
-        fromColorA = currentColorA;
-        fromColorB = currentColorB;
-        fromColorC = currentColorC;
-        fromBaseBgColor = currentBaseBgColor;
+    public void onBeatTrigger(float strength) {
+    }
 
-        targetColorA = a;
-        targetColorB = b;
-        targetColorC = c;
-        targetBaseBgColor = baseBg;
+    private void tryInitVisualizer() {
+        if (visualizer != null) return;
+        Context ctx = getContext();
+        if (ctx == null) return;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            if (ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+        }
+        try {
+            visualizer = new Visualizer(0);
+            int[] range = Visualizer.getCaptureSizeRange();
+            int captureSize = (range != null && range.length >= 2) ? Math.min(range[1], 1024) : 512;
+            visualizer.setCaptureSize(captureSize);
+            visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
+                @Override
+                public void onWaveFormDataCapture(Visualizer v, byte[] waveform, int samplingRate) {
+                    if (waveform != null && waveform.length > 0) {
+                        int maxDiff = 0;
+                        for (byte b : waveform) {
+                            int val = b & 0xFF;
+                            int diff = Math.abs(val - 128);
+                            if (diff > maxDiff) maxDiff = diff;
+                        }
+                        visualizerPulse = (float) maxDiff / 128.0f;
+                    }
+                }
 
-        transitionStartUptimeMs = SystemClock.uptimeMillis();
-        postInvalidateOnAnimation();
+                @Override
+                public void onFftDataCapture(Visualizer v, byte[] fft, int samplingRate) {
+                }
+            }, Visualizer.getMaxCaptureRate(), true, false);
+            visualizer.setEnabled(true);
+        } catch (Throwable t) {
+            releaseVisualizer();
+        }
+    }
+
+    private void releaseVisualizer() {
+        if (visualizer != null) {
+            try {
+                visualizer.setEnabled(false);
+                visualizer.release();
+            } catch (Throwable ignored) {
+            }
+            visualizer = null;
+        }
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         isAttached = true;
+        tryInitVisualizer();
         postInvalidateOnAnimation();
     }
 
@@ -182,13 +279,27 @@ public final class DynamicBackgroundView extends View {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         isAttached = false;
+        releaseVisualizer();
     }
 
     @Override
     protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         if (visibility == VISIBLE && isAttached) {
+            tryInitVisualizer();
             postInvalidateOnAnimation();
+        } else {
+            releaseVisualizer();
+        }
+    }
+
+    private void processAudioPulse() {
+        boolean isPlaying = LyricsManager.getInstance().isPlaying();
+        if (isPlaying && visualizerPulse > 0.001f) {
+            beatPulse = visualizerPulse;
+            visualizerPulse *= 0.85f;
+        } else {
+            beatPulse = (beatPulse > 0.0001f) ? beatPulse * 0.9f : 0.0f;
         }
     }
 
@@ -199,66 +310,195 @@ public final class DynamicBackgroundView extends View {
         final int h = getHeight();
         if (w <= 0 || h <= 0) return;
 
-        // Update color crossfade
-        long now = SystemClock.uptimeMillis();
-        if (transitionStartUptimeMs > 0) {
-            float progress = (float) (now - transitionStartUptimeMs) / TRANSITION_DURATION_MS;
-            if (progress >= 1f) {
-                currentColorA = targetColorA;
-                currentColorB = targetColorB;
-                currentColorC = targetColorC;
-                currentBaseBgColor = targetBaseBgColor;
-                transitionStartUptimeMs = 0;
-            } else {
-                currentColorA = (int) COLOR_EVALUATOR.evaluate(progress, fromColorA, targetColorA);
-                currentColorB = (int) COLOR_EVALUATOR.evaluate(progress, fromColorB, targetColorB);
-                currentColorC = (int) COLOR_EVALUATOR.evaluate(progress, fromColorC, targetColorC);
-                currentBaseBgColor = (int) COLOR_EVALUATOR.evaluate(progress, fromBaseBgColor, targetBaseBgColor);
-            }
+        final long now = SystemClock.uptimeMillis();
+        if (startTimeMs == 0) startTimeMs = now;
+        final float elapsedSec = (lastDrawTimeMs > 0) ? Math.min((now - lastDrawTimeMs) / 1000.0f, 0.1f) : 0.016f;
+        lastDrawTimeMs = now;
+        final float currentTime = (now - startTimeMs) / 1000.0f;
+
+        if (artworkTransitionProgress < 1.0f) {
+            artworkTransitionProgress = Math.min(1.0f, artworkTransitionProgress + ARTWORK_TRANSITION_SPEED * 1.5f);
         }
 
-        // Draw dynamic tinted base canvas
-        canvas.drawColor(currentBaseBgColor);
+        processAudioPulse();
+        final float pulse = beatPulse;
 
-        // Smooth orbital physics for 3 mesh blobs
-        final float t = now * 0.00030f;
-        final float maxDim = Math.max(w, h);
+        beatEnergyBaseline += (pulse - beatEnergyBaseline) * Math.min(1.0f, 0.8f * elapsedSec);
+        final float relativePulse = Math.max(0.0f, pulse - beatEnergyBaseline);
 
-        // Blob 1: upper area, slow circular drift
-        float cx1 = w * 0.5f + (float) Math.cos(t * 0.9f) * (w * 0.38f);
-        float cy1 = h * 0.32f + (float) Math.sin(t * 0.7f) * (h * 0.22f);
-        float r1 = maxDim * 0.90f;
-        int col1 = Color.argb(0xD8, Color.red(currentColorA), Color.green(currentColorA), Color.blue(currentColorA));
-        RadialGradient g1 = new RadialGradient(cx1, cy1, r1, col1, Color.TRANSPARENT, Shader.TileMode.CLAMP);
-        paint.setShader(g1);
-        canvas.drawCircle(cx1, cy1, r1, paint);
+        final float attackSpeed = 12.0f;
+        final float decaySpeed = BEAT_SCALE_DECAY;
 
-        // Blob 2: mid-lower area, counter orbital rotation
-        float cx2 = w * 0.5f + (float) Math.sin(-t * 0.8f) * (w * 0.35f);
-        float cy2 = h * 0.68f + (float) Math.cos(-t * 0.6f) * (h * 0.25f);
-        float r2 = maxDim * 0.86f;
-        int col2 = Color.argb(0xCC, Color.red(currentColorB), Color.green(currentColorB), Color.blue(currentColorB));
-        RadialGradient g2 = new RadialGradient(cx2, cy2, r2, col2, Color.TRANSPARENT, Shader.TileMode.CLAMP);
-        paint.setShader(g2);
-        canvas.drawCircle(cx2, cy2, r2, paint);
+        for (int i = 0; i < 3; i++) {
+            layerPerimTime[i] += elapsedSec * (1.0f + pulse * BEAT_SPD_BOOST[i]);
 
-        // Blob 3: central accent harmonic pulse
-        float cx3 = w * 0.5f + (float) Math.cos(t * 1.3f) * (w * 0.25f);
-        float cy3 = h * 0.50f + (float) Math.sin(t * 1.1f) * (h * 0.18f);
-        float r3 = maxDim * 0.76f;
-        int col3 = Color.argb(0xC0, Color.red(currentColorC), Color.green(currentColorC), Color.blue(currentColorC));
-        RadialGradient g3 = new RadialGradient(cx3, cy3, r3, col3, Color.TRANSPARENT, Shader.TileMode.CLAMP);
-        paint.setShader(g3);
-        canvas.drawCircle(cx3, cy3, r3, paint);
+            float speed = relativePulse > layerBeatScale[i] ? attackSpeed : decaySpeed;
+            float delta = Math.min(1.0f, speed * elapsedSec);
+            layerBeatScale[i] += (relativePulse - layerBeatScale[i]) * delta;
+            layerBeatRot[i] += (relativePulse - layerBeatRot[i]) * delta;
 
-        paint.setShader(null);
+            float bs = Math.max(0.0f, Math.min(1.0f, layerBeatScale[i]));
+            float smoothBS = bs * bs * (3.0f - 2.0f * bs);
 
-        // Dark scrim overlay for high-contrast legible typography
+            float br = Math.max(0.0f, Math.min(1.0f, layerBeatRot[i]));
+            float smoothBR = br * br * (3.0f - 2.0f * br);
+
+            float rot = INITIAL_ROTATIONS[i] + (ROTATION_SPEEDS[i] * currentTime * ROTATION_POWER) + smoothBR * BEAT_ROT_BOOST[i];
+
+            float bx = LAYER_BASE_POSITIONS[i * 2];
+            float by = LAYER_BASE_POSITIONS[i * 2 + 1];
+
+            float offset = i * 0.33f;
+            float t = ((offset + PERIMETER_DIRECTION[i] * PERIMETER_SPEEDS[i] * layerPerimTime[i]) % 1.0f);
+            if (t < 0.0f) t += 1.0f;
+            float angle = t * TWO_PI;
+            float px = Math.abs(bx) * (float) Math.cos(angle);
+            float py = Math.abs(by) * (float) Math.sin(angle);
+
+            cachedLayerRots[i] = rot;
+            cachedLayerScales[i] = LAYER_SCALES[i] + smoothBS * BEAT_SCALE_BOOST[i];
+            cachedLayerPosX[i] = px;
+            cachedLayerPosY[i] = py;
+        }
+
+        bufferCanvas.drawColor(0xFF1E1E28);
+
+        if (artworkTransitionProgress < 1.0f && previousArtwork != null) {
+            renderLayers(bufferCanvas, previousArtwork, 1.0f - artworkTransitionProgress);
+        }
+        Bitmap activeArt = (currentArtwork != null) ? currentArtwork : defaultArtwork;
+        renderLayers(bufferCanvas, activeArt, (previousArtwork != null) ? artworkTransitionProgress : 1.0f);
+
+        bufferBitmap.getPixels(pixelsSrc, 0, BUFFER_SIZE, 0, 0, BUFFER_SIZE, BUFFER_SIZE);
+        fastBoxBlur(pixelsSrc, pixelsTemp, pixelsDst, BUFFER_SIZE, BUFFER_SIZE, BLUR_RADIUS);
+        blurBitmap.setPixels(pixelsDst, 0, BUFFER_SIZE, 0, 0, BUFFER_SIZE, BUFFER_SIZE);
+
+        int maxDim = Math.max(w, h);
+        int left = (w - maxDim) / 2;
+        int top = (h - maxDim) / 2;
+        screenRect.set(left, top, left + maxDim, top + maxDim);
+        canvas.drawBitmap(blurBitmap, null, screenRect, postProcessPaint);
+
+        if (scrimGradient == null || lastGradientHeight != h) {
+            lastGradientHeight = h;
+            scrimGradient = new LinearGradient(
+                    0f, 0f, 0f, (float) h,
+                    new int[] { 0xCC000000, 0x88000000, 0xCC000000 },
+                    new float[] { 0.0f, 0.5f, 1.0f },
+                    Shader.TileMode.CLAMP
+            );
+            scrimPaint.setShader(scrimGradient);
+        }
         canvas.drawRect(0, 0, w, h, scrimPaint);
+        canvas.drawColor(0x27505050);
 
-        // Continue fluid 60/120 FPS animation loop when visible
         if (isAttached && getVisibility() == VISIBLE) {
             postInvalidateOnAnimation();
+        }
+    }
+
+    private void renderLayers(Canvas c, Bitmap bmp, float alpha) {
+        if (bmp == null || bmp.isRecycled() || alpha <= 0.001f) return;
+        layerPaint.setAlpha((int) (255 * Math.min(1.0f, Math.max(0.0f, alpha))));
+        float baseScale = (float) BUFFER_SIZE / Math.min(bmp.getWidth(), bmp.getHeight());
+
+        for (int i = 0; i < 3; i++) {
+            layerMatrix.reset();
+            layerMatrix.postTranslate(-bmp.getWidth() * 0.5f, -bmp.getHeight() * 0.5f);
+            layerMatrix.postScale(baseScale * cachedLayerScales[i], baseScale * cachedLayerScales[i]);
+            layerMatrix.postRotate((float) -Math.toDegrees(cachedLayerRots[i]));
+
+            float transX = (BUFFER_SIZE * 0.5f) + cachedLayerPosX[i] * (BUFFER_SIZE * 0.5f);
+            float transY = (BUFFER_SIZE * 0.5f) - cachedLayerPosY[i] * (BUFFER_SIZE * 0.5f);
+            layerMatrix.postTranslate(transX, transY);
+
+            c.drawBitmap(bmp, layerMatrix, layerPaint);
+        }
+    }
+
+    /**
+     * High-speed 2-pass box blur on packed 32-bit ARGB pixel arrays.
+     */
+    private static void fastBoxBlur(int[] src, int[] temp, int[] dst, int w, int h, int radius) {
+        if (radius < 1) return;
+        // Pass 1: Horizontal & Vertical
+        boxBlurH(src, temp, w, h, radius);
+        boxBlurV(temp, dst, w, h, radius);
+        // Pass 2: Gaussian bell-curve approximation
+        boxBlurH(dst, temp, w, h, radius);
+        boxBlurV(temp, dst, w, h, radius);
+    }
+
+    private static void boxBlurH(int[] src, int[] dst, int w, int h, int radius) {
+        final int div = 2 * radius + 1;
+        for (int y = 0; y < h; y++) {
+            final int row = y * w;
+            int rSum = 0, gSum = 0, bSum = 0;
+            final int firstPixel = src[row];
+            final int fr = (firstPixel >> 16) & 0xFF;
+            final int fg = (firstPixel >> 8) & 0xFF;
+            final int fb = firstPixel & 0xFF;
+
+            rSum = fr * (radius + 1);
+            gSum = fg * (radius + 1);
+            bSum = fb * (radius + 1);
+
+            for (int i = 1; i <= radius; i++) {
+                int p = src[row + Math.min(i, w - 1)];
+                rSum += (p >> 16) & 0xFF;
+                gSum += (p >> 8) & 0xFF;
+                bSum += p & 0xFF;
+            }
+
+            for (int x = 0; x < w; x++) {
+                dst[row + x] = 0xFF000000
+                        | ((rSum / div) << 16)
+                        | ((gSum / div) << 8)
+                        | (bSum / div);
+
+                int pIn = src[row + Math.min(x + radius + 1, w - 1)];
+                int pOut = src[row + Math.max(x - radius, 0)];
+
+                rSum += ((pIn >> 16) & 0xFF) - ((pOut >> 16) & 0xFF);
+                gSum += ((pIn >> 8) & 0xFF) - ((pOut >> 8) & 0xFF);
+                bSum += (pIn & 0xFF) - (pOut & 0xFF);
+            }
+        }
+    }
+
+    private static void boxBlurV(int[] src, int[] dst, int w, int h, int radius) {
+        final int div = 2 * radius + 1;
+        for (int x = 0; x < w; x++) {
+            int rSum = 0, gSum = 0, bSum = 0;
+            final int firstPixel = src[x];
+            final int fr = (firstPixel >> 16) & 0xFF;
+            final int fg = (firstPixel >> 8) & 0xFF;
+            final int fb = firstPixel & 0xFF;
+
+            rSum = fr * (radius + 1);
+            gSum = fg * (radius + 1);
+            bSum = fb * (radius + 1);
+
+            for (int i = 1; i <= radius; i++) {
+                int p = src[Math.min(i, h - 1) * w + x];
+                rSum += (p >> 16) & 0xFF;
+                gSum += (p >> 8) & 0xFF;
+                bSum += p & 0xFF;
+            }
+
+            for (int y = 0; y < h; y++) {
+                dst[y * w + x] = 0xFF000000
+                        | ((rSum / div) << 16)
+                        | ((gSum / div) << 8)
+                        | (bSum / div);
+
+                int pIn = src[Math.min(y + radius + 1, h - 1) * w + x];
+                int pOut = src[Math.max(y - radius, 0) * w + x];
+
+                rSum += ((pIn >> 16) & 0xFF) - ((pOut >> 16) & 0xFF);
+                gSum += ((pIn >> 8) & 0xFF) - ((pOut >> 8) & 0xFF);
+                bSum += (pIn & 0xFF) - (pOut & 0xFF);
+            }
         }
     }
 }
