@@ -562,8 +562,6 @@ Mga kinakailangang cookie: SID, HSID, SSID, SAPISID, __Secure-3PAPISID, __Secure
   <string name="morphe_music_lyrics_about_summary">"Ang mga liriko ay itinutugma sa pamagat at artist, ang hindi pangkaraniwang metadata ay maaaring walang mahanap o maling bersyon. Gamitin ang refresh upang lumipat ng mga bersyon. Ang mga provider na may markang * ay nangangailangan ng token. Ang lahat ng pinagana na provider ay hindi palaging hinihiling sa iyong order, ngunit tumutugon batay sa kanilang bilis"</string>
   <string name="morphe_music_lyrics_hide_info_title">Itago ang linya ng kredito</string>
   <string name="morphe_music_lyrics_hide_info_summary">Itago ang linya ng kredito na ipinapakita sa ibaba ng lyrics.</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_title">Pagpalitin ang pagsasalin at romanisasyon.</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_summary">Kapag ON, nasa ibaba ng lyrics ang romanisasyon at nasa itaas ang pagsasalin; kapag OFF, nananatili sa itaas ang romanisasyon at nasa ibaba ang pagsasalin.</string>
   <string name="morphe_music_lyrics_use_ai_translation_title">Pagsasaling tumutugma sa OpenAI</string>
   <string name="morphe_music_lyrics_use_ai_translation_summary">Gumamit ng custom na API na katugma sa OpenAI para sa pagsasalin at romanisasyon sa halip na Google Translate</string>
   <string name="morphe_music_lyrics_ai_config_dialog_title">Mga Setting para sa AI Translation</string>

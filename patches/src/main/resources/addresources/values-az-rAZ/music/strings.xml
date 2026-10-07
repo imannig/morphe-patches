@@ -567,8 +567,6 @@ Fon səsləndirmə zamanı analiz sinxronlaşdırılmasına əmin olmaq üçün 
   <string name="morphe_music_lyrics_about_summary">"Mahnı sözləri başlığa və ifaçıya görə uyğunlaşır; qeyri-adi şərhi məlumatlar heç nə tapmaya və ya yanlış versiyanı tapa bilər. Versiyaları dəyişmək üçün yenilə düyməsin istifadə et. * işarəsi olan provayderlər token tələb edir. İşlək bütün provayderlər həmişə sizin təyin etdiyiniz ardıcıllıqla sorğulanmır, öz sürətlərinə görə cavab verirlər"</string>
   <string name="morphe_music_lyrics_hide_info_title">Müəllif sətrini gizlət</string>
   <string name="morphe_music_lyrics_hide_info_summary">Mahnı sözlərinin altında göstərilən müəllif sətrini gizlət</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_title">Tərcümə və transkripsiyanın yerini dəyiş</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_summary">AÇIQ olduqda transkripsiya sözlərin altında və tərcümə yuxarıda göstərilir; QAPALI olduqda transkripsiya üstdə, tərcümə isə altda qalır</string>
   <string name="morphe_music_lyrics_use_ai_translation_title">OpenAI uyğun tərcümə</string>
   <string name="morphe_music_lyrics_use_ai_translation_summary">Tərcümə və transkripsiya üçün Google Tərcümə əvəzinə fərdi OpenAI uyğun API-sini istifadə et</string>
   <string name="morphe_music_lyrics_ai_config_dialog_title">Süni İntellekt Tərcümə Tənzimləmələri</string>

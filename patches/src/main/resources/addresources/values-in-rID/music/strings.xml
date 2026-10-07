@@ -588,8 +588,6 @@ Cookie yang diperlukan: SID, HSID, SSID, SAPISID, __Secure-3PAPISID, __Secure-1P
   <string name="morphe_music_lyrics_ai_config_status_validating">Memvalidasi koneksi…</string>
   <string name="morphe_music_lyrics_ai_config_translation_provider_label">Penyedia Terjemahan</string>
   <string name="morphe_music_lyrics_ai_config_romanization_provider_label">Penyedia Romanisasi</string>
-  <string name="morphe_music_lyrics_ai_config_target_lang_label">Ganti Bahasa Target</string>
-  <string name="morphe_music_lyrics_ai_config_target_lang_hint">mis. id, en, ja (atau \'app\' untuk bawaan)</string>
   <string name="morphe_music_lyrics_ai_config_fetch_models">Ambil Model</string>
   <string name="morphe_music_lyrics_ai_config_fetching_models">Mengambil model…</string>
   <string name="morphe_music_lyrics_ai_config_fetch_models_success">Pilih Model</string>

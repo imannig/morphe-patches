@@ -560,8 +560,6 @@ YouTube Music 8.x — クロスフェードは9.x以降でのみ実行されま�
   <string name="morphe_music_lyrics_about_summary">"歌詞はタイトルとアーティストで照合されます。通常とは異なるメタデータでは、何も見つからないか、間違ったバージョンが見つかる可能性があります。更新を使用してバージョンを切り替えてください。* が付いているプロバイダーはトークンが必要です。有効なすべてのプロバイダーが常に指定された順序で要求されるわけではなく、応答速度に基づいて応答します。"</string>
   <string name="morphe_music_lyrics_hide_info_title">この歌詞を編集</string>
   <string name="morphe_music_lyrics_hide_info_summary">この歌詞を編集</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_title">この歌詞を編集</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_summary">この歌詞を編集</string>
   <string name="morphe_music_lyrics_use_ai_translation_title">OpenAI 互換の翻訳</string>
   <string name="morphe_music_lyrics_use_ai_translation_summary">Google 翻訳の代わりに、設定した OpenAI 互換 API を翻訳とローマ字表記に使用します</string>
   <string name="morphe_music_lyrics_ai_config_dialog_title">AI 翻訳の設定</string>

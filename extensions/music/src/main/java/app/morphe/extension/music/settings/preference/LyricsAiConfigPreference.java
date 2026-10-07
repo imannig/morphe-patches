@@ -119,14 +119,10 @@ public class LyricsAiConfigPreference extends SwitchPreference
     private void updateSummaryText() {
         String trans = Settings.LYRICS_TRANSLATION_PROVIDER.get();
         String roma = Settings.LYRICS_ROMANIZATION_PROVIDER.get();
-        String target = Settings.LYRICS_TRANSLATE_TARGET_LANG.get();
 
         StringBuilder sb = new StringBuilder();
         sb.append("Trans: ").append(formatProviderName(trans));
         sb.append(" | Roma: ").append(formatProviderName(roma));
-        if (target != null && !target.isEmpty() && !"app".equalsIgnoreCase(target)) {
-            sb.append(" [").append(target).append("]");
-        }
         setSummary(sb.toString());
     }
 
@@ -162,8 +158,7 @@ public class LyricsAiConfigPreference extends SwitchPreference
         if ("morphe_music_lyrics_show_translate_button".equals(key)
                 || "morphe_music_lyrics_show_romanize_button".equals(key)
                 || "morphe_music_lyrics_translation_provider".equals(key)
-                || "morphe_music_lyrics_romanization_provider".equals(key)
-                || "morphe_music_lyrics_translate_target_lang".equals(key)) {
+                || "morphe_music_lyrics_romanization_provider".equals(key)) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 updateVisibility();
                 updateSummaryText();
@@ -231,15 +226,6 @@ public class LyricsAiConfigPreference extends SwitchPreference
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         instrParams.bottomMargin = Dim.dp12;
         content.addView(instruction, instrParams);
-
-        // Target language override
-        content.addView(createLabel(context, str("morphe_music_lyrics_ai_config_target_lang_label")));
-        EditText targetLangInput = createThemedEditText(context);
-        targetLangInput.setHint(str("morphe_music_lyrics_ai_config_target_lang_hint"));
-        String curTargetLang = Settings.LYRICS_TRANSLATE_TARGET_LANG.get();
-        targetLangInput.setText(curTargetLang);
-        targetLangInput.setSelection(curTargetLang.length());
-        content.addView(targetLangInput);
 
         // Translation Provider Selector
         content.addView(createLabel(context, str("morphe_music_lyrics_ai_config_translation_provider_label")));
@@ -452,8 +438,6 @@ public class LyricsAiConfigPreference extends SwitchPreference
                 null,
                 str("morphe_settings_save"),
                 () -> {
-                    String targetLang = targetLangInput.getText().toString().trim();
-                    Settings.LYRICS_TRANSLATE_TARGET_LANG.save(targetLang.isEmpty() ? "app" : targetLang);
                     Settings.LYRICS_TRANSLATION_PROVIDER.save(selectedTrans[0]);
                     Settings.LYRICS_ROMANIZATION_PROVIDER.save(selectedRoma[0]);
 
@@ -487,7 +471,6 @@ public class LyricsAiConfigPreference extends SwitchPreference
                 () -> {
                     Settings.LYRICS_TRANSLATION_PROVIDER.resetToDefault();
                     Settings.LYRICS_ROMANIZATION_PROVIDER.resetToDefault();
-                    Settings.LYRICS_TRANSLATE_TARGET_LANG.resetToDefault();
                     Settings.LYRICS_GEMINI_API_KEY.resetToDefault();
                     Settings.LYRICS_GEMINI_MODEL.resetToDefault();
                     Settings.LYRICS_OPENROUTER_API_KEY.resetToDefault();
@@ -501,7 +484,6 @@ public class LyricsAiConfigPreference extends SwitchPreference
                     Settings.LYRICS_DEEPL_API_KEY.resetToDefault();
                     Settings.LYRICS_USE_AI_TRANSLATION.resetToDefault();
 
-                    targetLangInput.setText("app");
                     selectedTrans[0] = "google";
                     selectedRoma[0] = "google";
                     updateButtonLabel(transBtn, TRANS_LABELS, TRANS_VALUES, "google");

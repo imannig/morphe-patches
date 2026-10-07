@@ -35,17 +35,14 @@ public final class LyricsTranslator {
 
     private static String translationLanguage() {
         String language = Settings.LYRICS_TRANSLATION_LANGUAGE.get();
-        return "DEFAULT".equalsIgnoreCase(language)
+        String lang = "DEFAULT".equalsIgnoreCase(language)
                 ? LyricsRequests.deviceLanguage()
-                : language.toLowerCase(Locale.ROOT);
-    }
-
-    public static String getEffectiveTargetLanguage() {
-        String target = Settings.LYRICS_TRANSLATE_TARGET_LANG.get().trim();
-        if (!target.isEmpty() && !"app".equalsIgnoreCase(target)) {
-            return target;
+                : language;
+        if (lang == null || lang.isEmpty()) {
+            return "en";
         }
-        return LyricsRequests.deviceLanguage();
+        lang = lang.toLowerCase(Locale.ROOT);
+        return "in".equals(lang) ? "id" : lang;
     }
 
     @Nullable
@@ -92,7 +89,8 @@ public final class LyricsTranslator {
             return "";
         }
         final int idx = lang.indexOf('-');
-        return (idx >= 0 ? lang.substring(0, idx) : lang).toLowerCase(Locale.ROOT);
+        String sub = (idx >= 0 ? lang.substring(0, idx) : lang).toLowerCase(Locale.ROOT);
+        return "in".equals(sub) ? "id" : sub;
     }
 
     public static void translate(TrackInfo track, Lyrics lyrics, String source, Callback callback) {

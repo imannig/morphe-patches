@@ -637,8 +637,6 @@ Required cookies: SID, HSID, SSID, SAPISID, __Secure-3PAPISID, __Secure-1PAPISID
     <string name="morphe_music_lyrics_ai_config_status_validating">Validating connection…</string>
     <string name="morphe_music_lyrics_ai_config_translation_provider_label">Translation Provider</string>
     <string name="morphe_music_lyrics_ai_config_romanization_provider_label">Romanization Provider</string>
-    <string name="morphe_music_lyrics_ai_config_target_lang_label">Target Language Override</string>
-    <string name="morphe_music_lyrics_ai_config_target_lang_hint">e.g. id, en, ja (or \'app\' for default)</string>
     <string name="morphe_music_lyrics_ai_config_fetch_models">Fetch Models</string>
     <string name="morphe_music_lyrics_ai_config_fetching_models">Fetching models…</string>
     <string name="morphe_music_lyrics_ai_config_fetch_models_success">Select a Model</string>

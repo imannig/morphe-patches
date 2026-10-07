@@ -571,8 +571,6 @@ YouTube Music 8.x —— 交叉淡入仅在 9.x 及更高版本上运行"</strin
   <string name="morphe_music_lyrics_about_summary">"歌词根据标题和艺术家进行匹配，异常的元数据可能导致找不到结果或匹配到错误的版本。使用刷新以切换版本。标有 * 的提供程序需要令牌。并非所有已启用的提供程序都会按您的顺序被请求，而是根据其速度进行响应。"</string>
   <string name="morphe_music_lyrics_hide_info_title">隐藏署名行</string>
   <string name="morphe_music_lyrics_hide_info_summary">隐藏显示在歌词下方的署名行</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_title">交换翻译和音译</string>
-  <string name="morphe_music_lyrics_swap_trans_roma_summary">开启时，音译在歌词下方、翻译在歌词上方；关闭时，音译在歌词上方、翻译在歌词下方</string>
   <string name="morphe_music_lyrics_use_ai_translation_title">OpenAI 兼容翻译</string>
   <string name="morphe_music_lyrics_use_ai_translation_summary">使用自定义的 OpenAI 兼容 API 进行翻译和音译，而不是 Google 翻译</string>
   <string name="morphe_music_lyrics_ai_config_dialog_title">AI 翻译设置</string>
