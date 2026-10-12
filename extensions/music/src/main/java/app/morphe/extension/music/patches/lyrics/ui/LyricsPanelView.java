@@ -1546,6 +1546,16 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         }
         LyricsRomanizer.setCurrentSongIsJapanese(songHasJapanese);
 
+        boolean songHasRtl = false;
+        if (newLyrics.lines() != null) {
+            for (LyricsLine l : newLyrics.lines()) {
+                if (LyricsRomanizer.containsArabic(l.text()) || LyricsRomanizer.containsHebrew(l.text())) {
+                    songHasRtl = true;
+                    break;
+                }
+            }
+        }
+
         final int generation = ++buildGeneration;
 
         gapIntervals.clear();
@@ -1558,13 +1568,20 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         if (isSynced) {
             for (int i = 0; i < newLyrics.lines().size(); i++) {
                 LyricsLine line = newLyrics.lines().get(i);
+                final boolean isLineRtl = LyricsRomanizer.containsArabic(line.text()) || LyricsRomanizer.containsHebrew(line.text());
+                final boolean isRightAligned;
+                if (isDuetSong) {
+                    isRightAligned = songHasRtl ? !line.isDuet() : line.isDuet();
+                } else {
+                    isRightAligned = isLineRtl;
+                }
                 if (i == 0) {
                     long currentStart = line.startTimeMs();
                     if (currentStart != LyricsLine.NO_TIME
                             && currentStart >= INTERVAL_MIN_GAP_MS) {
                         long gapStart = 0L;
                         long gapEnd = Math.max(gapStart + 600L, currentStart - GAP_EXIT_DURATION_MS);
-                        gapIntervals.add(new GapInterval(gapStart, gapEnd, currentStart, line.isDuet(), 0));
+                        gapIntervals.add(new GapInterval(gapStart, gapEnd, currentStart, line.isDuet(), 0, isRightAligned));
                     }
                 } else {
                     LyricsLine prevLine = newLyrics.lines().get(i - 1);
@@ -1600,7 +1617,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                     if ((currentStart - safeEnd) >= INTERVAL_MIN_GAP_MS) {
                         long gapStart = safeEnd;
                         long gapEnd = Math.max(gapStart + 600L, currentStart - GAP_EXIT_DURATION_MS);
-                        gapIntervals.add(new GapInterval(gapStart, gapEnd, currentStart, line.isDuet(), i));
+                        gapIntervals.add(new GapInterval(gapStart, gapEnd, currentStart, line.isDuet(), i, isRightAligned));
                     }
                 }
             }
@@ -1778,7 +1795,14 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
             final int duetSideInset = Math.max(Dim.dp(48), (int) (context.getResources().getDisplayMetrics().widthPixels * 0.18f));
             final boolean isLineRtl = LyricsRomanizer.containsArabic(line.text()) || LyricsRomanizer.containsHebrew(line.text());
             boolean isDuetLine = line.isDuet() || (isSec && currentParentIdx >= 0 && newLyrics.lines().get(currentParentIdx).isDuet());
-            if (isDuetLine || isLineRtl) {
+            final boolean isRightAligned;
+            if (isDuetSong) {
+                isRightAligned = songHasRtl ? !isDuetLine : isDuetLine;
+            } else {
+                isRightAligned = isLineRtl;
+            }
+
+            if (isRightAligned) {
                 lineView.setGravity(Gravity.END);
                 lineView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
             } else {
@@ -1816,16 +1840,14 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
             lineRow.setClipToPadding(false);
             currentParentRow = lineRow;
 
-            if (line.isDuet()) {
-                lineRow.setPadding(duetSideInset, Dim.dp(2), 0, Dim.dp(2));
-            } else if (isLineRtl) {
-                lineRow.setPadding(0, Dim.dp(2), 0, Dim.dp(2));
-            } else {
-                if (isDuetSong) {
-                    lineRow.setPadding(0, Dim.dp(2), duetSideInset, Dim.dp(2));
+            if (isDuetSong) {
+                if (isRightAligned) {
+                    lineRow.setPadding(duetSideInset, Dim.dp(2), 0, Dim.dp(2));
                 } else {
-                    lineRow.setPadding(0, Dim.dp(2), 0, Dim.dp(2));
+                    lineRow.setPadding(0, Dim.dp(2), duetSideInset, Dim.dp(2));
                 }
+            } else {
+                lineRow.setPadding(0, Dim.dp(2), 0, Dim.dp(2));
             }
 
             lineRow.addView(lineView, new LinearLayout.LayoutParams(
