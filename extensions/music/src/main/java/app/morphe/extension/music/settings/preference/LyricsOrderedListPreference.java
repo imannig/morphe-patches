@@ -50,9 +50,10 @@ public final class LyricsOrderedListPreference extends Preference {
 
     /** Canonical provider ids, in the default priority order, shown in the list. */
     private static final List<String> PROVIDER_ORDER = Arrays.asList(
-            "YTMusic", "Captions", "LRCLIB", "QQ", "NetEase", "KuGou", "Luna",
-            "PetitLyrics", "bLyrics", "BiniLyrics", "Unison", "SimpMusic", "AMLL",
-            "LunaBeat", "Lyricify", "Apple", "Musixmatch", "Spotify", "Deezer");
+            "Apple", "BiniLyrics", "LrcRed", "bLyrics", "Lyricify", "Unison",
+            "PetitLyrics", "AMLL", "QQ", "SimpMusic", "KuGou", "Musixmatch",
+            "YTMusic", "LRCLIB", "NetEase", "Luna", "LunaBeat",
+            "Captions", "Spotify", "Deezer");
 
     /** Friendlier labels for display; ids not present here are shown verbatim. */
     private static final Map<String, String> PROVIDER_LABELS = new HashMap<>();
@@ -66,6 +67,7 @@ public final class LyricsOrderedListPreference extends Preference {
         PROVIDER_LABELS.put("Musixmatch", "Musixmatch");
         PROVIDER_LABELS.put("Spotify", "Spotify *");
         PROVIDER_LABELS.put("Deezer", "Deezer *");
+        PROVIDER_LABELS.put("LrcRed", "lrc.red");
     }
 
     private static String providerLabel(String id) {

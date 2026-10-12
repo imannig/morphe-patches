@@ -525,6 +525,7 @@ Cookie yang diperlukan: SID, HSID, SSID, SAPISID, __Secure-3PAPISID, __Secure-1P
   <string name="morphe_music_lyrics_show_refresh_button_title">Tampilkan tombol Segarkan</string>
   <string name="morphe_music_lyrics_show_refresh_button_summary">Ketuk untuk berpindah ke kandidat lirik berikutnya; tekan lama untuk mencari lirik berdasarkan judul lagu dan artis.</string>
   <string name="morphe_music_lyrics_search_dialog_title">Cari lirik</string>
+  <string name="morphe_music_lyrics_search_dialog_desc">Cari lirik secara manual berdasarkan judul lagu dan artis</string>
   <string name="morphe_music_lyrics_search_title_hint">Judul lagu</string>
   <string name="morphe_music_lyrics_search_artist_hint">Artis</string>
   <string name="morphe_music_lyrics_search_empty">Masukkan judul lagu dan artis</string>

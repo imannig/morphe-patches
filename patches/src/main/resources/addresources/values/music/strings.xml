@@ -573,6 +573,7 @@ Required cookies: SID, HSID, SSID, SAPISID, __Secure-3PAPISID, __Secure-1PAPISID
     <string name="morphe_music_lyrics_show_refresh_button_title">Show Refresh button</string>
     <string name="morphe_music_lyrics_show_refresh_button_summary">Tap to switch to next lyrics candidate; long press to search lyrics by song title and artist</string>
     <string name="morphe_music_lyrics_search_dialog_title">Search lyrics</string>
+    <string name="morphe_music_lyrics_search_dialog_desc">Search lyrics manually by song title and artist</string>
     <string name="morphe_music_lyrics_search_title_hint">Song title</string>
     <string name="morphe_music_lyrics_search_artist_hint">Artist</string>
     <string name="morphe_music_lyrics_search_empty">Enter a song title and an artist</string>
