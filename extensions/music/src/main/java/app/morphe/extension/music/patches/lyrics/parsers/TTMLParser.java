@@ -28,6 +28,7 @@ import app.morphe.extension.music.patches.lyrics.model.Lyrics;
 import app.morphe.extension.music.patches.lyrics.model.LyricsLine;
 import app.morphe.extension.music.patches.lyrics.model.LyricsMerge;
 import app.morphe.extension.music.patches.lyrics.model.Word;
+import app.morphe.extension.music.patches.lyrics.translate.LyricsRomanizer;
 import app.morphe.extension.shared.Logger;
 
 /**
@@ -247,11 +248,18 @@ public final class TTMLParser {
 
                         final ParsedLine pl = processPElement(p, pBegin, pEnd);
 
-                        if (pl != null && !pl.text().trim().isEmpty()) {
-                            final LyricsLine line = new LyricsLine(
-                                    pl.begin(), pl.end(), pl.text(), pl.words(),
-                                    agentId, false, false, divSongPart);
-                            lines.add(line);
+                        if (pl != null && (!pl.text().trim().isEmpty() || !pl.bgLines().isEmpty())) {
+                            final List<RomajiSyllable> lineSidecar =
+                                    findSidecarRoman(lineId, sidecarRoman);
+                            if (lineSidecar != null && !lineSidecar.isEmpty()) {
+                                alignRomajiToWords(pl.words(), lineSidecar);
+                            }
+                            if (!pl.text().trim().isEmpty()) {
+                                final LyricsLine line = new LyricsLine(
+                                        pl.begin(), pl.end(), pl.text(), pl.words(),
+                                        agentId, false, false, divSongPart);
+                                lines.add(line);
+                            }
                             mainLineCount = lines.size();
 
                             final String bgAgent = pl.bgAgentId() != null ? pl.bgAgentId() : agentId;
@@ -263,12 +271,12 @@ public final class TTMLParser {
                                 lines.add(bgLine);
                             }
 
-                            final List<RomajiSyllable> lineSidecar =
-                                    findSidecarRoman(lineId, sidecarRoman);
-                            final String romaText = buildLineRomaji(
-                                    pl.words(), lineSidecar);
-                            romanization.add(new LyricsLine(
-                                    LyricsLine.NO_TIME, romaText));
+                            if (!pl.text().trim().isEmpty()) {
+                                final String romaText = buildLineRomaji(
+                                        pl.words(), lineSidecar);
+                                romanization.add(new LyricsLine(
+                                        LyricsLine.NO_TIME, romaText));
+                            }
                             for (int i = 0; i < pl.bgLines().size(); i++) {
                                 romanization.add(new LyricsLine(LyricsLine.NO_TIME, ""));
                             }
@@ -1017,8 +1025,8 @@ public final class TTMLParser {
             } else if (event == XmlPullParser.TEXT) {
                 final String raw = p.getText();
                 if (raw == null || raw.isEmpty()) continue;
-                final boolean formattingNewline = raw.contains("\n") && raw.trim().isEmpty();
-                final boolean spaceBetweenWords = !raw.contains("\n") && raw.trim().isEmpty();
+                final boolean isWhitespace = raw.trim().isEmpty();
+                final boolean hasNewline = raw.contains("\n");
 
                 if (inBgTranslation) {
                     bgTransBuf.append(raw);
@@ -1027,18 +1035,23 @@ public final class TTMLParser {
                 } else if (inBgWord) {
                     bgWordBuf.append(raw);
                 } else if (inBg && bgWrapperDepth == 0) {
-                    // Formatting newlines (whitespace + \n) between BG word spans
-                    if (!formattingNewline) {
-                        bgFullText.append(raw);
-                    }
-                    // Whitespace-only (non-newline) between BG word spans
-                    if (spaceBetweenWords && !bgWords.isEmpty()) {
-                        final Word prev = bgWords.get(bgWords.size() - 1);
-                        if (!prev.endsWithSpace()) {
-                            bgWords.set(bgWords.size() - 1, new Word(
-                                    prev.startMs(), prev.endMs(),
-                                    prev.text(), prev.romaji(), true));
+                    if (isWhitespace) {
+                        if (!bgWords.isEmpty()) {
+                            final Word prev = bgWords.get(bgWords.size() - 1);
+                            final boolean cjk = isContinuousCjk(prev.text());
+                            if (!hasNewline || !cjk) {
+                                if (bgFullText.length() > 0 && bgFullText.charAt(bgFullText.length() - 1) != ' ') {
+                                    bgFullText.append(' ');
+                                }
+                                if (!prev.endsWithSpace()) {
+                                    bgWords.set(bgWords.size() - 1, new Word(
+                                            prev.startMs(), prev.endMs(),
+                                            prev.text(), prev.romaji(), true));
+                                }
+                            }
                         }
+                    } else {
+                        bgFullText.append(raw);
                     }
                 } else if (inRubyBase && inRubyContainer) {
                     rubyBaseBuf.append(raw);
@@ -1048,28 +1061,78 @@ public final class TTMLParser {
                     transBuf.append(raw);
                 } else if (inRoman) {
                     romanBuf.append(raw);
-                } else if (inWord) {
+                } else if (inWord && !inRubyContainer) {
                     wordBuf.append(raw);
-                } else if (!inBg) {
-                    // Formatting newlines (whitespace + \n) between word spans - skip entirely
-                    if (!formattingNewline) {
-                        fullText.append(raw);
-                        // Whitespace-only (non-newline) between word spans -> trailing space
-                        if (spaceBetweenWords && !words.isEmpty()) {
+                } else if (!inBg && !inRubyContainer) {
+                    if (isWhitespace) {
+                        if (!words.isEmpty()) {
                             final Word prev = words.get(words.size() - 1);
-                            if (!prev.endsWithSpace()) {
-                                words.set(words.size() - 1, new Word(
-                                        prev.startMs(), prev.endMs(),
-                                        prev.text(), prev.romaji(), true));
+                            final boolean cjk = isContinuousCjk(prev.text());
+                            if (!hasNewline || !cjk) {
+                                if (fullText.length() > 0 && fullText.charAt(fullText.length() - 1) != ' ') {
+                                    fullText.append(' ');
+                                }
+                                if (!prev.endsWithSpace()) {
+                                    words.set(words.size() - 1, new Word(
+                                            prev.startMs(), prev.endMs(),
+                                            prev.text(), prev.romaji(), true));
+                                }
                             }
                         }
+                    } else {
+                        fullText.append(raw);
                     }
                 }
             }
         }
 
-        final String lineText = normalizeText(fullText.toString());
-        if (lineText.trim().isEmpty()) {
+        final String rawLineText = normalizeText(fullText.toString());
+        String lineText = rawLineText;
+        if (lineText.indexOf(' ') < 0 && words.size() > 1 && !isContinuousCjk(words.get(0).text())) {
+            StringBuilder reconstructed = new StringBuilder();
+            for (int i = 0; i < words.size(); i++) {
+                final Word w = words.get(i);
+                if (i > 0) reconstructed.append(' ');
+                reconstructed.append(w.text());
+                final boolean shouldEndWithSpace = (i < words.size() - 1);
+                if (w.endsWithSpace() != shouldEndWithSpace) {
+                    words.set(i, new Word(w.startMs(), w.endMs(), w.text(), w.romaji(), shouldEndWithSpace));
+                }
+            }
+            lineText = reconstructed.toString();
+        }
+
+        // Save final BG section if still open
+        //noinspection SizeReplaceableByIsEmpty
+        if (inBg && (!bgWords.isEmpty() || bgFullText.length() > 0)) {
+            String bgText = normalizeText(bgFullText.toString());
+            if (!bgText.trim().isEmpty()) {
+                String cleanBgText = bgText.replaceAll("^[(（]+", "").replaceAll("[)）]+$", "").trim();
+                stripBgWordParens(bgWords);
+                if (cleanBgText.indexOf(' ') < 0 && bgWords.size() > 1 && !isContinuousCjk(bgWords.get(0).text())) {
+                    StringBuilder reconstructed = new StringBuilder();
+                    for (int i = 0; i < bgWords.size(); i++) {
+                        final Word w = bgWords.get(i);
+                        if (i > 0) reconstructed.append(' ');
+                        reconstructed.append(w.text());
+                        final boolean shouldEndWithSpace = (i < bgWords.size() - 1);
+                        if (w.endsWithSpace() != shouldEndWithSpace) {
+                            bgWords.set(i, new Word(w.startMs(), w.endMs(), w.text(), w.romaji(), shouldEndWithSpace));
+                        }
+                    }
+                    cleanBgText = reconstructed.toString();
+                }
+                if (!cleanBgText.isEmpty()) {
+                    final long bgStart = bgBeginMs > 0 ? bgBeginMs : (bgWords.isEmpty() ? pBegin : bgWords.get(0).startMs());
+                    final long bgEnd = bgEndMs > 0 ? bgEndMs : (bgWords.isEmpty() ? pEnd : bgWords.get(bgWords.size() - 1).endMs());
+                    bgLines.add(new LyricsLine(bgStart, bgEnd, cleanBgText, new ArrayList<>(bgWords)));
+                }
+            }
+            bgWords.clear();
+            bgFullText.setLength(0);
+        }
+
+        if (lineText.trim().isEmpty() && bgLines.isEmpty()) {
             return null;
         }
 
@@ -1091,9 +1154,12 @@ public final class TTMLParser {
                     effectiveEnd = maxEnd;
                 }
             }
+        } else if ((effectiveBegin == 0 || effectiveEnd == 0) && !bgLines.isEmpty()) {
+            effectiveBegin = bgLines.get(0).startTimeMs();
+            effectiveEnd = bgLines.get(bgLines.size() - 1).endTimeMs();
         }
 
-        if (effectiveBegin == 0 && effectiveEnd == 0 && words.isEmpty()) {
+        if (effectiveBegin == 0 && effectiveEnd == 0 && words.isEmpty() && bgLines.isEmpty()) {
             effectiveBegin = LyricsLine.NO_TIME;
             effectiveEnd = LyricsLine.NO_TIME;
         }
@@ -1112,17 +1178,9 @@ public final class TTMLParser {
             }
         }
 
-        //noinspection SizeReplaceableByIsEmpty
-        if (inBg && (!bgWords.isEmpty() || bgFullText.length() > 0)) {
-            String bgText = normalizeText(bgFullText.toString());
-            if (!bgText.trim().isEmpty()) {
-                bgText = bgText.replaceAll("^[(（]+", "").replaceAll("[)）]+$", "").trim();
-                stripBgWordParens(bgWords);
-                if (!bgText.isEmpty()) {
-                    final long bgStart = bgBeginMs > 0 ? bgBeginMs : pBegin;
-                    final long bgEnd = bgEndMs > 0 ? bgEndMs : pEnd;
-                    bgLines.add(new LyricsLine(bgStart, bgEnd, bgText, bgWords));
-                }
+        for (LyricsLine bg : bgLines) {
+            if (bg.endTimeMs() > effectiveEnd && effectiveEnd > 0) {
+                effectiveEnd = bg.endTimeMs();
             }
         }
 
@@ -1149,6 +1207,19 @@ public final class TTMLParser {
             bgWords.set(lastIdx, new Word(last.startMs(), last.endMs(),
                     strippedLast, last.romaji(), false));
         }
+    }
+
+    public static boolean isContinuousCjk(@Nullable String s) {
+        if (s == null || s.isEmpty()) return false;
+        int cp = s.codePointBefore(s.length());
+        Character.UnicodeBlock b = Character.UnicodeBlock.of(cp);
+        return b == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                || b == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A
+                || b == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_B
+                || b == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
+                || b == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION
+                || b == Character.UnicodeBlock.HIRAGANA
+                || b == Character.UnicodeBlock.KATAKANA;
     }
 
     private static void alignRomajiToWords(List<Word> words,
@@ -1225,10 +1296,22 @@ public final class TTMLParser {
 
     private static String buildLineRomaji(List<Word> words,
                                           @Nullable List<RomajiSyllable> sidecar) {
+        if (sidecar != null && !sidecar.isEmpty()) {
+            final StringBuilder sb = new StringBuilder();
+            for (RomajiSyllable s : sidecar) {
+                if (s.text().isEmpty()) continue;
+                sb.append(s.text());
+            }
+            final String result = sb.toString().trim();
+            if (!result.isEmpty() && LyricsRomanizer.isPurelyLatinScript(result)) {
+                return result;
+            }
+        }
+
         final StringBuilder perWord = new StringBuilder();
         boolean hasPerWord = false;
         for (Word w : words) {
-            if (w.romaji() != null && !w.romaji().isEmpty()) {
+            if (w.romaji() != null && !w.romaji().isEmpty() && LyricsRomanizer.isPurelyLatinScript(w.romaji())) {
                 hasPerWord = true;
                 break;
             }
@@ -1236,29 +1319,15 @@ public final class TTMLParser {
         if (hasPerWord) {
             for (Word w : words) {
                 String r = w.romaji();
-                if (r != null && !r.isEmpty()) {
-                    //noinspection SizeReplaceableByIsEmpty
-                    if (perWord.length() > 0) perWord.append(' ');
+                if (r != null && !r.isEmpty() && LyricsRomanizer.isPurelyLatinScript(r)) {
                     perWord.append(r);
+                    if (w.endsWithSpace() && !r.endsWith(" ")) {
+                        perWord.append(' ');
+                    }
                 }
             }
-            //noinspection SizeReplaceableByIsEmpty
             if (perWord.length() > 0) {
-                return perWord.toString();
-            }
-        }
-
-        if (sidecar != null && !sidecar.isEmpty()) {
-            final StringBuilder sb = new StringBuilder();
-            for (RomajiSyllable s : sidecar) {
-                if (s.text().isEmpty()) continue;
-                //noinspection SizeReplaceableByIsEmpty
-                if (sb.length() > 0) sb.append(' ');
-                sb.append(s.text());
-            }
-            final String result = sb.toString().trim();
-            if (!result.isEmpty()) {
-                return result;
+                return perWord.toString().trim();
             }
         }
 
@@ -1299,13 +1368,14 @@ public final class TTMLParser {
             final StringBuilder sb = new StringBuilder();
             for (Word w : alignedWords) {
                 if (w.romaji() != null && !w.romaji().isEmpty()) {
-                    //noinspection SizeReplaceableByIsEmpty
-                    if (sb.length() > 0) sb.append(' ');
                     sb.append(w.romaji());
+                    if (w.endsWithSpace() && !w.romaji().endsWith(" ")) {
+                        sb.append(' ');
+                    }
                 }
             }
             final String text = sb.toString().trim();
-            if (!text.isEmpty()) {
+            if (!text.isEmpty() && LyricsRomanizer.isPurelyLatinScript(text)) {
                 final String langKey = lang != null ? lang : "romaji";
                 final List<LyricsLine> langLines = romanizations.computeIfAbsent(
                         langKey, k -> new ArrayList<>());
