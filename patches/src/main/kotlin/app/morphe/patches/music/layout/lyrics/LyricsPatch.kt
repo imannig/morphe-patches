@@ -127,8 +127,6 @@ val lyricsPatch = bytecodePatch(
                         dependency = "morphe_music_lyrics_enabled"
                     ),
                     SwitchPreference("morphe_music_lyrics_word_sync", summary = true),
-                    SwitchPreference("morphe_music_lyrics_hide_played", summary = true),
-                    SwitchPreference("morphe_music_lyrics_hide_unplayed", summary = true),
                     SwitchPreference("morphe_music_lyrics_tap_to_seek", summary = true),
                     SwitchPreference("morphe_music_lyrics_show_copy_button", summary = true),
                     SwitchPreference("morphe_music_lyrics_show_translate_button", summary = true),
@@ -145,7 +143,6 @@ val lyricsPatch = bytecodePatch(
                     ),
                     SwitchPreference("morphe_music_lyrics_show_refresh_button", summary = true),
                     SwitchPreference("morphe_music_lyrics_hide_info", summary = true),
-                    SwitchPreference("morphe_music_lyrics_swap_trans_roma", summary = true),
                     SwitchPreference("morphe_music_lyrics_keep_screen_on", summary = true)
                 )
             ),
