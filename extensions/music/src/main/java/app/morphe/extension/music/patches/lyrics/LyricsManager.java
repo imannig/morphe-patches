@@ -63,6 +63,7 @@ import app.morphe.extension.music.patches.lyrics.requests.DeezerProvider;
 import app.morphe.extension.music.patches.lyrics.requests.KuGouProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LRCLIBProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LocalLyricsFetcher;
+import app.morphe.extension.music.patches.lyrics.requests.LrcRedProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LunaBeatProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LunaProvider;
 import app.morphe.extension.music.patches.lyrics.requests.LyricifyProvider;
@@ -2752,9 +2753,10 @@ public final class LyricsManager {
 
     /** Canonical provider ids, in the default priority order. */
     private static final List<String> PROVIDER_ORDER = Arrays.asList(
-            "YTMusic", "Captions", "LRCLIB", "QQ", "NetEase", "KuGou",
-            "Luna", "PetitLyrics", "bLyrics", "BiniLyrics",
-            "Unison", "SimpMusic", "AMLL", "LunaBeat", "Lyricify", "Apple", "Musixmatch", "Spotify", "Deezer");
+            "Apple", "BiniLyrics", "LrcRed", "bLyrics", "Lyricify", "Unison",
+            "PetitLyrics", "AMLL", "QQ", "SimpMusic", "KuGou", "Musixmatch",
+            "YTMusic", "LRCLIB", "NetEase", "Luna", "LunaBeat",
+            "Captions", "Spotify", "Deezer");
 
     @NonNull
     private static List<String> enabledProviderIds(String order) {
@@ -2937,7 +2939,7 @@ public final class LyricsManager {
                 || "NetEase".equalsIgnoreCase(id) || "AMLL".equalsIgnoreCase(id)
                 || "LunaBeat".equalsIgnoreCase(id) || "Lyricify".equalsIgnoreCase(id)
                 || "Apple".equalsIgnoreCase(id) || "Spotify".equalsIgnoreCase(id)
-                || "Musixmatch".equalsIgnoreCase(id);
+                || "Musixmatch".equalsIgnoreCase(id) || "LrcRed".equalsIgnoreCase(id);
     }
 
     public static boolean isLineSyncCapable(String id) {
@@ -2945,7 +2947,7 @@ public final class LyricsManager {
                 || "Captions".equalsIgnoreCase(id) || "SimpMusic".equalsIgnoreCase(id)
                 || "Luna".equalsIgnoreCase(id) || "bLyrics".equalsIgnoreCase(id)
                 || "BiniLyrics".equalsIgnoreCase(id) || "Unison".equalsIgnoreCase(id)
-                || "Deezer".equalsIgnoreCase(id);
+                || "Deezer".equalsIgnoreCase(id) || "LrcRed".equalsIgnoreCase(id);
     }
 
     /**
@@ -3197,6 +3199,7 @@ public final class LyricsManager {
             case "Lyricify" -> new LyricifyProvider();
             case "Musixmatch" -> new MusixmatchProvider();
             case "Deezer" -> new DeezerProvider();
+            case "LrcRed" -> new LrcRedProvider();
             default -> null;
         };
     }
