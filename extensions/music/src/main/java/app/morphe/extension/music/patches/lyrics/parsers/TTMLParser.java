@@ -1113,10 +1113,10 @@ public final class TTMLParser {
             return null;
         }
 
-        // Infer time range from children when <p> has no timing
+        // infer time range from words or expand end so syllable not cut off
         long effectiveBegin = pBegin;
         long effectiveEnd = pEnd;
-        if ((effectiveBegin == 0 || effectiveEnd == 0) && !words.isEmpty()) {
+        if (!words.isEmpty()) {
             long minStart = Long.MAX_VALUE;
             long maxEnd = 0;
             for (Word w : words) {

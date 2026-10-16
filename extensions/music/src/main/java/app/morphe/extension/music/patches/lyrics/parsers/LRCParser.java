@@ -90,7 +90,9 @@ public final class LRCParser {
             char last = trimmed.charAt(trimmed.length() - 1);
             return (first == '(' && last == ')')
                     || (first == '（' && last == '）')
-                    || (first == '[' && last == ']');
+                    || (first == '[' && last == ']')
+                    || (first == '{' && last == '}')
+                    || (first == '<' && last == '>');
         }
         return false;
     }
