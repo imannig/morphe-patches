@@ -226,7 +226,7 @@ public class Settings extends SharedYouTubeSettings {
     public static final BooleanSetting LYRICS_ROMANIZE_ONLY = new BooleanSetting("morphe_music_lyrics_romanize_only", FALSE, false, parent(LYRICS_ENABLED));
     public static final BooleanSetting LYRICS_WORD_SYNC = new BooleanSetting("morphe_music_lyrics_word_sync", TRUE, false, parent(LYRICS_ENABLED));
     public static final BooleanSetting LYRICS_BLUR_INACTIVE = new BooleanSetting("morphe_music_lyrics_blur_inactive", TRUE, false, parent(LYRICS_ENABLED));
-    public static final IntegerSetting LYRICS_TEXT_SIZE = new IntegerSetting("morphe_music_lyrics_text_size", 26, false, parent(LYRICS_ENABLED));
+    public static final IntegerSetting LYRICS_TEXT_SIZE = new IntegerSetting("morphe_music_lyrics_text_size", 30, false, parent(LYRICS_ENABLED));
     public static final IntegerSetting LYRICS_OFFSET_MS = new IntegerSetting("morphe_music_lyrics_offset_ms", 0, false, parent(LYRICS_ENABLED));
     public static final BooleanSetting LYRICS_SB_MATCHING = new BooleanSetting("morphe_music_lyrics_sb_matching", TRUE, false, parent(LYRICS_ENABLED));
     public static final BooleanSetting LYRICS_MEDIASESSION = new BooleanSetting("morphe_music_lyrics_mediasession", FALSE, false, parent(LYRICS_ENABLED));
@@ -372,7 +372,7 @@ public class Settings extends SharedYouTubeSettings {
         SeekBarPreference.register(new SeekBarConfig(LASTFM_DELAY_SECONDS,
                 30, 360, 10, "s"));
         SeekBarPreference.register(new SeekBarConfig(LYRICS_TEXT_SIZE,
-                18, 32, 2, "sp"));
+                18, 36, 2, "sp"));
         SeekBarPreference.register(new SeekBarConfig(LYRICS_OFFSET_MS,
                 -2000, 2000, 100, "ms"));
         SeekBarPreference.register(new SeekBarConfig(PLAYBACK_SPEED,

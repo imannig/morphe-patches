@@ -134,25 +134,50 @@ public final class LyricsMerge {
             }
 
             final long winStart = orig.startTimeMs();
-            final long winEnd = (i < original.size() - 1)
-                    ? original.get(i + 1).startTimeMs()
-                    : Long.MAX_VALUE;
+            long winEnd = Long.MAX_VALUE;
+            for (int nextIdx = i + 1; nextIdx < size; nextIdx++) {
+                LyricsLine nextOrig = original.get(nextIdx);
+                if (!nextOrig.isBG() && nextOrig.startTimeMs() > winStart + 50L) {
+                    winEnd = nextOrig.startTimeMs();
+                    break;
+                }
+            }
 
-            String matched = "";
-            while (auxIdx < auxCount) {
-                long auxStart = sorted.get(auxIdx).startTimeMs();
-                if (auxStart < winStart - 500) {
-                    auxIdx++;
+            LyricsLine matchedLine = null;
+            int bestIdx = -1;
+            long bestDiff = Long.MAX_VALUE;
+            for (int k = auxIdx; k < auxCount; k++) {
+                LyricsLine cand = sorted.get(k);
+                long auxStart = cand.startTimeMs();
+                if (auxStart < winStart - 500L) {
+                    if (k == auxIdx) {
+                        auxIdx++;
+                    }
                     continue;
                 }
                 if (auxStart >= winEnd) {
                     break;
                 }
-                matched = sorted.get(auxIdx).text();
-                auxIdx++;
-                break;
+                long diff = Math.abs(auxStart - winStart);
+                if (diff < bestDiff && diff <= 2500L) {
+                    bestDiff = diff;
+                    bestIdx = k;
+                    matchedLine = cand;
+                }
+                if (auxStart >= winStart && diff <= 150L) {
+                    break;
+                }
             }
-            result.add(new LyricsLine(winStart, matched == null ? "" : matched));
+            if (bestIdx >= 0) {
+                auxIdx = bestIdx + 1;
+            }
+            String matched = matchedLine != null ? matchedLine.text() : "";
+            if (matchedLine != null && matchedLine.hasWords()) {
+                result.add(new LyricsLine(winStart, matchedLine.endTimeMs(), matched == null ? "" : matched,
+                        matchedLine.words(), orig.agentId(), orig.isDuet(), orig.isBG(), orig.songPart()));
+            } else {
+                result.add(new LyricsLine(winStart, matched == null ? "" : matched));
+            }
         }
         return result;
     }

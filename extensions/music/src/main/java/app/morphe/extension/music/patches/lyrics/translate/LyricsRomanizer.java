@@ -379,17 +379,6 @@ public final class LyricsRomanizer {
         final String langContext = detectLanguageContext(lyrics, track);
         currentSongIsJapanese = "japanese".equals(langContext);
 
-        List<LyricsLine> embedded = forceFullTransliteration ? null : getEmbeddedRomanization(lyrics);
-        final boolean perWord = !forceFullTransliteration && LyricsMerge.anyWordHasRomaji(lyrics != null ? lyrics.lines() : null);
-        final boolean degraded = !forceFullTransliteration && isProviderRomajiDegraded(embedded, lyrics != null ? lyrics.lines() : null, perWord);
-
-        // prioritize provider romaji first if it look good and not broken
-        if (!forceFullTransliteration && !degraded && (LyricsMerge.hasText(embedded) || perWord)) {
-            List<LyricsLine> result = embedded;
-            Utils.runOnMainThread(() -> callback.onRomanized(result, false, false, null, perWord));
-            return;
-        }
-
         boolean anyLineHasWords = false;
         if (lyrics != null && lyrics.lines() != null) {
             for (LyricsLine l : lyrics.lines()) {
@@ -400,6 +389,19 @@ public final class LyricsRomanizer {
             }
         }
         final boolean isWordSynced = anyLineHasWords;
+
+        List<LyricsLine> embedded = forceFullTransliteration ? null : getEmbeddedRomanization(lyrics);
+        final boolean perWord = !forceFullTransliteration && LyricsMerge.anyWordHasRomaji(lyrics != null ? lyrics.lines() : null);
+        final boolean degraded = !forceFullTransliteration && isProviderRomajiDegraded(embedded, lyrics != null ? lyrics.lines() : null, perWord);
+
+        // prioritize provider romaji first if it look good and not broken
+        if (!forceFullTransliteration && !degraded && (LyricsMerge.hasText(embedded) || perWord)) {
+            List<LyricsLine> result = (isWordSynced && embedded != null)
+                    ? alignLinesToWordSync(lyrics, embedded)
+                    : embedded;
+            Utils.runOnMainThread(() -> callback.onRomanized(result, false, false, null, perWord || isWordSynced));
+            return;
+        }
 
         List<String> lines = new ArrayList<>(lyrics != null && lyrics.lines() != null ? lyrics.lines().size() : 0);
         if (lyrics != null && lyrics.lines() != null) {
@@ -420,7 +422,8 @@ public final class LyricsRomanizer {
 
                     List<LyricsLine> aiCached = LyricsCache.getRomanizationAI(track, source, lines);
                     if (aiCached != null) {
-                        Utils.runOnMainThread(() -> callback.onRomanized(aiCached, false, true, effectiveProvider, false));
+                        final List<LyricsLine> alignedCached = isWordSynced ? alignLinesToWordSync(lyrics, aiCached) : aiCached;
+                        Utils.runOnMainThread(() -> callback.onRomanized(alignedCached, false, true, effectiveProvider, isWordSynced));
                         return;
                     }
 
@@ -468,10 +471,11 @@ public final class LyricsRomanizer {
                     }
 
                     if (aiResult != null && !aiResult.isEmpty()) {
-                        List<LyricsLine> aiLines = toLines(aiResult);
+                        List<LyricsLine> rawAiLines = toLines(aiResult);
+                        List<LyricsLine> aiLines = isWordSynced ? alignLinesToWordSync(lyrics, rawAiLines) : rawAiLines;
                         LyricsCache.putRomanizationAI(track, source, lines, aiLines);
                         final String finalModel = modelUsed;
-                        Utils.runOnMainThread(() -> callback.onRomanized(aiLines, false, true, finalModel, false));
+                        Utils.runOnMainThread(() -> callback.onRomanized(aiLines, false, true, finalModel, isWordSynced));
                         return;
                     }
                 }
@@ -1118,6 +1122,42 @@ public final class LyricsRomanizer {
             }
         }
         return false;
+    }
+
+    private static List<LyricsLine> alignLinesToWordSync(@Nullable Lyrics lyrics, @Nullable List<LyricsLine> rLines) {
+        if (lyrics == null || lyrics.lines() == null || rLines == null) {
+            return rLines;
+        }
+        List<LyricsLine> origLines = lyrics.lines();
+        List<LyricsLine> out = new ArrayList<>(origLines.size());
+        for (int i = 0; i < origLines.size(); i++) {
+            LyricsLine orig = origLines.get(i);
+            LyricsLine rLine = (i < rLines.size()) ? rLines.get(i) : null;
+            if (rLine == null) {
+                out.add(new LyricsLine(orig.startTimeMs(), ""));
+                continue;
+            }
+            if (!orig.hasWords() || (rLine.hasWords() && rLine.words().size() == orig.words().size())) {
+                out.add(rLine);
+                continue;
+            }
+            String fullRoma = rLine.text() != null ? rLine.text().trim() : "";
+            if (fullRoma.isEmpty()) {
+                out.add(rLine);
+                continue;
+            }
+            List<Word> origWords = orig.words();
+            List<String> alignedChunks = alignRomanizationAnchors(origWords, fullRoma);
+            List<Word> rWords = new ArrayList<>(origWords.size());
+            for (int w = 0; w < origWords.size(); w++) {
+                Word ow = origWords.get(w);
+                String chunk = (w < alignedChunks.size()) ? alignedChunks.get(w) : "";
+                rWords.add(new Word(ow.startMs(), ow.endMs(), chunk, chunk, ow.endsWithSpace()));
+            }
+            out.add(new LyricsLine(orig.startTimeMs(), orig.endTimeMs(), fullRoma, rWords,
+                    orig.agentId(), orig.isDuet(), orig.isBG(), orig.songPart()));
+        }
+        return out;
     }
 
     private static List<LyricsLine> toLines(List<String> texts) {
@@ -2140,6 +2180,43 @@ public final class LyricsRomanizer {
     }
 
 
+    @NonNull
+    public static List<String> alignRomanizationAnchors(
+            @Nullable List<Word> origWords,
+            @Nullable String fullText) {
+        if (origWords == null || origWords.isEmpty()) return Collections.emptyList();
+        final int count = origWords.size();
+        List<String> originalSyllables = new ArrayList<>(count);
+        List<String> romanizedGuides = new ArrayList<>(count);
+        for (Word w : origWords) {
+            String text = w.text() != null ? w.text() : "";
+            originalSyllables.add(text);
+            String guide = w.romaji();
+            if (guide == null || guide.trim().isEmpty() || hasCjk(guide)) {
+                if (isPurelyLatinScript(text)) {
+                    guide = text.trim();
+                } else if (containsJapanese(text)) {
+                    guide = romanizeJapanese(text).trim();
+                } else if (containsHangul(text)) {
+                    guide = romanizeHangul(text).trim();
+                } else {
+                    guide = "";
+                }
+            } else {
+                guide = guide.trim();
+            }
+            romanizedGuides.add(guide != null ? guide : "");
+        }
+        return alignRomanizationAnchors(fullText != null ? fullText : "", romanizedGuides, originalSyllables);
+    }
+
+    @NonNull
+    public static List<String> alignRomanizationAnchors(
+            @Nullable String fullText,
+            @Nullable List<Word> origWords) {
+        return alignRomanizationAnchors(origWords, fullText);
+    }
+
     /**
      * Partitions fullText into M segments that phonetically match the guides while preserving spaces.
      */
@@ -2157,6 +2234,46 @@ public final class LyricsRomanizer {
             List<String> empty = new ArrayList<>(M);
             for (int i = 0; i < M; i++) empty.add("");
             return empty;
+        }
+
+        boolean anyGuide = false;
+        for (String g : romanizedGuides) {
+            if (g != null && !g.trim().isEmpty()) {
+                anyGuide = true;
+                break;
+            }
+        }
+        if (!anyGuide && !target.trim().isEmpty()) {
+            String[] split = target.trim().split("\\s+");
+            List<String> chunks = new ArrayList<>(M);
+            if (split.length == M) {
+                for (int i = 0; i < M; i++) {
+                    chunks.add(split[i] + (i < M - 1 ? " " : ""));
+                }
+                return chunks;
+            } else if (split.length > 0) {
+                if (split.length < M) {
+                    for (int i = 0; i < M; i++) {
+                        int tokStart = (i * split.length) / M;
+                        int tokEnd = ((i + 1) * split.length) / M;
+                        String rom = (tokEnd > tokStart && tokStart < split.length) ? split[tokStart] : "";
+                        chunks.add(rom + (!rom.isEmpty() && i < M - 1 ? " " : ""));
+                    }
+                } else {
+                    for (int i = 0; i < M; i++) {
+                        int tokStart = (i * split.length) / M;
+                        int tokEnd = (i == M - 1) ? split.length : (((i + 1) * split.length) / M);
+                        StringBuilder sb = new StringBuilder();
+                        for (int k = tokStart; k < tokEnd && k < split.length; k++) {
+                            if (sb.length() > 0) sb.append(" ");
+                            sb.append(split[k]);
+                        }
+                        if (i < M - 1) sb.append(" ");
+                        chunks.add(sb.toString());
+                    }
+                }
+                return chunks;
+            }
         }
 
         double[][] dp = new double[M + 1][N + 1];

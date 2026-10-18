@@ -266,41 +266,24 @@ public final class OpenAIClient {
         if (response == null) {
             return null;
         }
-        String[] result = response.split("\n", -1);
-        int end = result.length;
-        while (end > 0 && result[end - 1].trim().isEmpty()) {
-            end--;
-        }
-        if (end == 0) {
-            return null;
-        }
-        boolean allSkip = true;
-        for (int i = 0; i < end; i++) {
-            result[i] = stripLineNumber(result[i]);
-            if (!GeminiClient.isSkipToken(result[i])) {
-                allSkip = false;
-            }
-        }
-        if (allSkip) {
-            return null;
-        }
-        if (end > sourceLines.size() + 2 || end < sourceLines.size() - 2) {
+        List<String> parsed = GeminiClient.parseNumberedLines(response, sourceLines.size());
+        if (parsed == null) {
             return null;
         }
         List<String> out = new ArrayList<>(sourceLines.size());
+        boolean anyValid = false;
         for (int i = 0; i < sourceLines.size(); i++) {
-            if (i < end) {
-                String trimmed = result[i].trim();
-                if (GeminiClient.isSkipToken(trimmed) || isNoteOrEmptyLine(sourceLines.get(i))) {
-                    out.add("");
-                } else {
-                    out.add(trimmed);
-                }
-            } else {
+            String trimmed = (i < parsed.size() && parsed.get(i) != null) ? parsed.get(i).trim() : "";
+            if (GeminiClient.isSkipToken(trimmed) || isNoteOrEmptyLine(sourceLines.get(i))) {
                 out.add("");
+            } else {
+                out.add(trimmed);
+                if (!trimmed.isEmpty()) {
+                    anyValid = true;
+                }
             }
         }
-        return out;
+        return anyValid ? out : null;
     }
 
     /**
@@ -342,8 +325,12 @@ public final class OpenAIClient {
             template = DEFAULT_PROMPT;
         }
         StringBuilder linesText = new StringBuilder();
-        for (String line : lines) {
-            linesText.append(Objects.requireNonNullElse(line, "")).append('\n');
+        for (int i = 0; i < lines.size(); i++) {
+            String line = Objects.requireNonNullElse(lines.get(i), "").trim();
+            if (!line.matches("^\\d+\\.\\s.*")) {
+                linesText.append(i + 1).append(". ");
+            }
+            linesText.append(line.isEmpty() ? "SKIP" : line).append('\n');
         }
         String count = String.valueOf(lines.size());
         Matcher matcher = PROMPT_VARIABLE.matcher(template);

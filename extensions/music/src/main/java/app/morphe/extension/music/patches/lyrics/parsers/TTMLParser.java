@@ -193,9 +193,9 @@ public final class TTMLParser {
 
             final List<String> songwriters;
             if (!hm.songwriters().isEmpty()) {
-                StringBuilder sb = new StringBuilder("Written by ");
+                StringBuilder sb = new StringBuilder("Written by: ");
                 for (int i = 0; i < hm.songwriters().size(); i++) {
-                    if (i > 0) sb.append(" · ");
+                    if (i > 0) sb.append(", ");
                     sb.append(hm.songwriters().get(i));
                 }
                 songwriters = List.of(sb.toString());

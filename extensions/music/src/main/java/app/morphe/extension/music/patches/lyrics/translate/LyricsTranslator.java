@@ -71,20 +71,6 @@ public final class LyricsTranslator {
             String text = line.text();
             out.add(text == null ? "" : text);
         }
-        List<LyricsLine> allLines = lyrics.lines();
-        for (int i = 0; i < out.size() && i < allLines.size(); i++) {
-            if (allLines.get(i).isBG()) {
-                for (int j = i - 1; j >= 0; j--) {
-                    if (!allLines.get(j).isBG() && j < out.size()) {
-                        String parentTrans = out.get(j);
-                        if (parentTrans != null && !parentTrans.isEmpty()) {
-                            out.set(i, parentTrans);
-                        }
-                        break;
-                    }
-                }
-            }
-        }
         return out;
     }
 
@@ -240,8 +226,10 @@ public final class LyricsTranslator {
         sb.append("- Output exactly ").append(lines.size()).append(" numbered lines (format: 1. <translated text>)\n");
         sb.append("- Do not include the original lyrics\n");
         sb.append("- If already in ").append(targetLang).append(", output SKIP\n\n");
-        for (String line : lines) {
-            sb.append(line).append("\n");
+        for (int i = 0; i < lines.size(); i++) {
+            String l = lines.get(i);
+            String clean = (l != null) ? l.trim() : "";
+            sb.append(i + 1).append(". ").append(clean.isEmpty() ? "SKIP" : clean).append("\n");
         }
         return sb.toString();
     }

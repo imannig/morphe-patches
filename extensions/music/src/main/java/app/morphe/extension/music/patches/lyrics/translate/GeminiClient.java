@@ -243,9 +243,12 @@ public final class GeminiClient {
                 || t.equalsIgnoreCase("SKIP.");
     }
 
+    private static final java.util.regex.Pattern NUMBERED_LINE_PATTERN =
+            java.util.regex.Pattern.compile("^(?:Line\\s+)?(\\d+)[.)\\]:\\-]\\s*(.*)$", java.util.regex.Pattern.CASE_INSENSITIVE);
+
     @Nullable
-    private static List<String> parseNumberedLines(String text, int expectedCount) {
-        if (text == null) return null;
+    static List<String> parseNumberedLines(String text, int expectedCount) {
+        if (text == null || expectedCount <= 0) return null;
         String[] raw = text.split("\n", -1);
         int end = raw.length;
         while (end > 0 && raw[end - 1].trim().isEmpty()) {
@@ -253,12 +256,52 @@ public final class GeminiClient {
         }
         if (end == 0) return null;
 
-        List<String> list = new ArrayList<>(expectedCount);
-        boolean anyNonEmpty = false;
-        for (int i = 0; i < raw.length && list.size() < expectedCount; i++) {
+        String[] byIndex = new String[expectedCount];
+        int matchedNumberedCount = 0;
+        boolean anyIndexedNonEmpty = false;
+
+        for (int i = 0; i < end; i++) {
             String line = raw[i].trim();
             if (line.isEmpty()) continue;
-            line = line.replaceFirst("^\\d+\\.\\s*", "").trim();
+            java.util.regex.Matcher m = NUMBERED_LINE_PATTERN.matcher(line);
+            if (m.matches()) {
+                try {
+                    int num = Integer.parseInt(m.group(1));
+                    int idx = num - 1;
+                    if (idx >= 0 && idx < expectedCount) {
+                        matchedNumberedCount++;
+                        String val = m.group(2) != null ? m.group(2).trim() : "";
+                        if (isSkipToken(val)) {
+                            byIndex[idx] = "";
+                        } else {
+                            byIndex[idx] = val;
+                            if (!val.isEmpty()) {
+                                anyIndexedNonEmpty = true;
+                            }
+                        }
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+
+        if (matchedNumberedCount >= Math.max(1, expectedCount / 2)) {
+            if (!anyIndexedNonEmpty) {
+                return null;
+            }
+            List<String> indexedList = new ArrayList<>(expectedCount);
+            for (int i = 0; i < expectedCount; i++) {
+                indexedList.add(byIndex[i] != null ? byIndex[i] : "");
+            }
+            return indexedList;
+        }
+
+        List<String> list = new ArrayList<>(expectedCount);
+        boolean anyNonEmpty = false;
+        for (int i = 0; i < end && list.size() < expectedCount; i++) {
+            String line = raw[i].trim();
+            if (line.isEmpty()) continue;
+            line = line.replaceFirst("^\\d+[.)\\]:\\-]\\s*", "").trim();
             if (isSkipToken(line)) {
                 line = "";
             } else {
