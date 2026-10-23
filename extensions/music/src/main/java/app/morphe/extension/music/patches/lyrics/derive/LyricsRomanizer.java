@@ -414,7 +414,8 @@ public final class LyricsRomanizer {
             List<LyricsLine> result = (isWordSynced && embedded != null)
                     ? alignLinesToWordSync(lyrics, embedded)
                     : embedded;
-            Utils.runOnMainThread(() -> callback.onRomanized(result, false, false, null, perWord || isWordSynced, null));
+            final boolean hasWordRomaji = perWord || (isWordSynced && result != null && LyricsMerge.anyWordHasRomaji(result));
+            Utils.runOnMainThread(() -> callback.onRomanized(result, false, false, null, hasWordRomaji, null));
             return;
         }
 
@@ -470,8 +471,9 @@ public final class LyricsRomanizer {
                     final String dictUsed = (hasResult && local != null && local.dictionary != null)
                             ? local.dictionary
                             : (hasResult ? "Local (Rule-based)" : null);
+                    final boolean hasWordRomaji = isWordSynced && finalResult != null && LyricsMerge.anyWordHasRomaji(finalResult);
                     Utils.runOnMainThread(() -> callback.onRomanized(
-                            finalResult, false, false, null, isWordSynced, dictUsed));
+                            finalResult, false, false, null, hasWordRomaji, dictUsed));
                     return;
                 }
 
@@ -486,7 +488,8 @@ public final class LyricsRomanizer {
                     List<LyricsLine> aiCached = LyricsCache.getRomanizationAI(track, source, lines);
                     if (aiCached != null) {
                         final List<LyricsLine> alignedCached = isWordSynced ? alignLinesToWordSync(lyrics, aiCached) : aiCached;
-                        Utils.runOnMainThread(() -> callback.onRomanized(alignedCached, false, true, effectiveProvider, isWordSynced, null));
+                        final boolean hasWordRomaji = isWordSynced && alignedCached != null && LyricsMerge.anyWordHasRomaji(alignedCached);
+                        Utils.runOnMainThread(() -> callback.onRomanized(alignedCached, false, true, effectiveProvider, hasWordRomaji, null));
                         return;
                     }
 
@@ -537,10 +540,13 @@ public final class LyricsRomanizer {
                     if (aiResult != null && !aiResult.isEmpty()) {
                         List<LyricsLine> rawAiLines = toLines(aiResult);
                         List<LyricsLine> aiLines = isWordSynced ? alignLinesToWordSync(lyrics, rawAiLines) : rawAiLines;
-                        LyricsCache.putRomanizationAI(track, source, lines, aiLines);
-                        final String finalModel = modelUsed;
-                        Utils.runOnMainThread(() -> callback.onRomanized(aiLines, false, true, finalModel, isWordSynced, null));
-                        return;
+                        if (LyricsMerge.hasText(aiLines)) {
+                            LyricsCache.putRomanizationAI(track, source, lines, aiLines);
+                            final String finalModel = modelUsed;
+                            final boolean hasWordRomaji = isWordSynced && LyricsMerge.anyWordHasRomaji(aiLines);
+                            Utils.runOnMainThread(() -> callback.onRomanized(aiLines, false, true, finalModel, hasWordRomaji, null));
+                            return;
+                        }
                     }
                 }
 
@@ -599,8 +605,9 @@ public final class LyricsRomanizer {
                 boolean hasResult = result != null && LyricsMerge.hasText(result);
                 final List<LyricsLine> finalResult = result;
                 final boolean fromGoogle = hasResult && online && local == null;
+                final boolean hasWordRomaji = isWordSynced && finalResult != null && LyricsMerge.anyWordHasRomaji(finalResult);
                 Utils.runOnMainThread(() -> callback.onRomanized(
-                        finalResult, fromGoogle, false, null, isWordSynced,
+                        finalResult, fromGoogle, false, null, hasWordRomaji,
                         local != null ? local.dictionary : null));
             } catch (Throwable ignored) {
                 Utils.runOnMainThread(
@@ -1211,18 +1218,18 @@ public final class LyricsRomanizer {
             }
             if (totalWordTokens >= 2) {
                 double avgWordLen = (double) charWordTokens / totalWordTokens;
-                double shortWordRatio = (double) shortWordTokens / totalWordTokens;
-                if (avgWordLen <= 2.6 || shortWordRatio > 0.35) {
+                double singleLetterRatio = (double) singleWordTokens / totalWordTokens;
+                if (avgWordLen < 1.4 || singleLetterRatio > 0.5) {
                     return true;
                 }
             }
         }
 
-        // if word length too short or too many fragment then reject it
+        // Readings made of single letter tokens are mora fragments, not words.
         if (totalTokens >= 2) {
             double avgLen = (double) totalChars / totalTokens;
             double shortRatio = (double) shortTokens / totalTokens;
-            if (avgLen <= 2.6 || shortRatio > 0.35) {
+            if (avgLen < 1.4 || shortRatio > 0.5) {
                 return true;
             }
         }
