@@ -7,6 +7,8 @@
 
 package app.morphe.extension.music.patches.lyrics.ui;
 
+import app.morphe.extension.music.patches.lyrics.romanizers.ScriptDetector;
+
 import static app.morphe.extension.shared.StringRef.str;
 
 import android.animation.Animator;
@@ -1808,10 +1810,10 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         if (isSynced) {
             for (int i = 0; i < newLyrics.lines().size(); i++) {
                 LyricsLine line = newLyrics.lines().get(i);
-                final boolean isLineRtl = LyricsRomanizer.containsArabic(line.text()) || LyricsRomanizer.containsHebrew(line.text());
+                final boolean isLineRtl = ScriptDetector.isLineRtl(line.text());
                 final boolean isRightAligned;
                 if (isDuetSong) {
-                    isRightAligned = songHasRtl ? !line.isDuet() : line.isDuet();
+                    isRightAligned = isLineRtl ? !line.isDuet() : line.isDuet();
                 } else {
                     isRightAligned = isLineRtl;
                 }
@@ -2079,12 +2081,12 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                 return false;
             });
 
-            final int duetSideInset = Math.max(Dim.dp(48), (int) (context.getResources().getDisplayMetrics().widthPixels * 0.18f));
-            final boolean isLineRtl = LyricsRomanizer.containsArabic(line.text()) || LyricsRomanizer.containsHebrew(line.text());
+            final int duetSideInset = Math.max(Dim.dp(24), (int) (context.getResources().getDisplayMetrics().widthPixels * 0.09f));
+            final boolean isLineRtl = ScriptDetector.isLineRtl(line.text());
             boolean isDuetLine = line.isDuet() || (isSec && currentParentIdx >= 0 && newLyrics.lines().get(currentParentIdx).isDuet());
             final boolean isRightAligned;
             if (isDuetSong) {
-                isRightAligned = songHasRtl ? !isDuetLine : isDuetLine;
+                isRightAligned = isLineRtl ? !isDuetLine : isDuetLine;
             } else {
                 isRightAligned = isLineRtl;
             }
@@ -3255,7 +3257,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         }
 
         // 5. Arabic / Hebrew (RTL) lines
-        if (LyricsRomanizer.containsArabic(rawText) || LyricsRomanizer.containsHebrew(rawText)) {
+        if (ScriptDetector.isLineRtl(rawText)) {
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\S+").matcher(rawText);
             List<LyricsLineView.WordUnit> units = new ArrayList<>();
 
