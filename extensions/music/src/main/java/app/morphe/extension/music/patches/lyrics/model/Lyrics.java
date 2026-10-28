@@ -234,23 +234,22 @@ public record Lyrics(List<LyricsLine> lines, String providerName, boolean synced
                 break;
             }
             long effectiveEnd = lastWord.endMs();
-            if (effectiveEnd == LyricsLine.NO_TIME || effectiveEnd <= lastWord.startMs()) {
-                if (line.endTimeMs() != LyricsLine.NO_TIME && line.endTimeMs() > lastWord.startMs()) {
-                    effectiveEnd = line.endTimeMs();
-                } else if (nextStart != LyricsLine.NO_TIME && nextStart > lastWord.startMs()) {
-                    effectiveEnd = nextStart;
-                } else {
-                    effectiveEnd = lastWord.startMs() + 200L;
-                }
+        if (effectiveEnd == LyricsLine.NO_TIME || effectiveEnd <= lastWord.startMs()) {
+            if (line.endTimeMs() != LyricsLine.NO_TIME && line.endTimeMs() > lastWord.startMs()) {
+                effectiveEnd = line.endTimeMs();
+            } else if (nextStart != LyricsLine.NO_TIME && nextStart > lastWord.startMs()) {
+                effectiveEnd = nextStart;
+            } else {
+                effectiveEnd = lastWord.startMs() + 200L;
             }
-
             if (nextStart != LyricsLine.NO_TIME && nextStart > lastWord.startMs()) {
                 effectiveEnd = Math.min(effectiveEnd, nextStart);
             }
-            if (line.endTimeMs() != LyricsLine.NO_TIME && line.endTimeMs() > lastWord.startMs()) {
-                effectiveEnd = Math.min(effectiveEnd, line.endTimeMs());
-            }
-
+        }
+        // ponytail: clamp only to explicit line.endTimeMs if provided, never truncate overlapping words to next line start
+        if (line.endTimeMs() != LyricsLine.NO_TIME && line.endTimeMs() > lastWord.startMs()) {
+            effectiveEnd = Math.min(effectiveEnd, line.endTimeMs() + 500L);
+        }
             long floor = lastWord.startMs() + 200L;
             if (nextStart != LyricsLine.NO_TIME && nextStart > lastWord.startMs()) {
                 floor = Math.min(floor, nextStart);

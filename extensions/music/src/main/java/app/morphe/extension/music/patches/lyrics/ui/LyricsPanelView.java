@@ -330,11 +330,11 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         return row.getHeight();
     }
 
-    // active lyric lock position moved down slightly to 40dp so not hit very top and not get clipped
+    // active lyric lock position moved down slightly to 72dp so it sits comfortably lower in viewport
     private int getScrollAnchorPx() {
         return (linesContainer != null && linesContainer.getPaddingTop() > 0)
                 ? linesContainer.getPaddingTop()
-                : Dim.dp(40);
+                : Dim.dp(72);
     }
 
     private int computeBlockScrollTargetY(int targetIndex) {
@@ -364,6 +364,19 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         int runStart = targetIndex;
         int runEnd = targetIndex;
         if (activeIndicesSet.size() > 1 && activeIndicesSet.contains(targetIndex)) {
+            int scanBack = targetIndex - 1;
+            while (scanBack >= 0) {
+                if (isSecondaryLineView(scanBack)) {
+                    scanBack--;
+                    continue;
+                }
+                if (activeIndicesSet.contains(scanBack)) {
+                    runStart = scanBack;
+                    scanBack--;
+                } else {
+                    break;
+                }
+            }
             int scan = targetIndex + 1;
             while (scan < lineRows.size()) {
                 if (isSecondaryLineView(scan)) {
@@ -996,7 +1009,7 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
         if (linesContainer == null) return;
         final boolean isSynced = (lyrics != null && lyrics.synced());
         final int viewportH = (scrollView != null) ? scrollView.getHeight() : 0;
-        final int top = Dim.dp(40);
+        final int top = Dim.dp(72);
         final int bottom = Dim.dp(32);
         if (linesContainer.getPaddingTop() != top || linesContainer.getPaddingBottom() != bottom) {
             linesContainer.setPadding(Dim.dp24, top, Dim.dp24, bottom);
@@ -1886,6 +1899,10 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
                     if (maxEnd > retimedLyrics.get(i).adjustedEndTimeMs) {
                         LyricsRetiming.RetimedEntry old = retimedLyrics.get(i);
                         retimedLyrics.set(i, new LyricsRetiming.RetimedEntry(old.line, old.startMs, old.actualEndTimeMs, maxEnd));
+                    }
+                    for (int j = i + 1; j < retimedLyrics.size() && isSecondaryLyricLine(j, newLyrics.lines()); j++) {
+                        LyricsRetiming.RetimedEntry oldSec = retimedLyrics.get(j);
+                        retimedLyrics.set(j, new LyricsRetiming.RetimedEntry(oldSec.line, oldSec.startMs, oldSec.actualEndTimeMs, maxEnd, true));
                     }
                 }
             }
@@ -5066,7 +5083,8 @@ public final class LyricsPanelView extends FrameLayout implements LyricsManager.
             final boolean hasActiveSec = activeParentsFromSecondary.contains(i);
             final boolean isActive = activeSet.contains(i) || hasActiveSec;
             final int signedDistance;
-            if (!isLrcSynced || hasActiveSec) {
+            // ponytail: any line in activeSet is fully focused with distance 0
+            if (!isLrcSynced || isActive) {
                 signedDistance = 0;
             } else if (anchorOrd >= 0) {
                 signedDistance = mainOrd[i] - anchorOrd;

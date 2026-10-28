@@ -308,14 +308,20 @@ public final class LyricsRetiming {
                 end = e.endTimeMs();
             }
             if (end == LyricsLine.NO_TIME) {
-                if (i + 1 < len) {
-                    long nextStart = lyrics.get(i + 1).startTimeMs();
-                    long gap = nextStart - startMs[i];
+                long nextDiffStart = LyricsLine.NO_TIME;
+                for (int j = i + 1; j < len; j++) {
+                    if (lyrics.get(j).startTimeMs() > startMs[i]) {
+                        nextDiffStart = lyrics.get(j).startTimeMs();
+                        break;
+                    }
+                }
+                if (nextDiffStart != LyricsLine.NO_TIME) {
+                    long gap = nextDiffStart - startMs[i];
                     if (gap < 11000L) {
-                        end = nextStart;
+                        end = nextDiffStart;
                     } else {
                         long vocalHold = Math.max(5000L, (e.text() != null ? e.text().length() : 10) * 180L);
-                        end = Math.min(startMs[i] + vocalHold, nextStart - 7000L);
+                        end = Math.min(startMs[i] + vocalHold, nextDiffStart - 7000L);
                     }
                 } else {
                     end = startMs[i] + Math.max(5000L, (e.text() != null ? e.text().length() : 10) * 180L);
@@ -332,9 +338,9 @@ public final class LyricsRetiming {
 
             while (clusterEnd < len - 1) {
                 int nextIdx = clusterEnd + 1;
-                // secondary vocal line (backing vocal) just skip it when clustering overlap, so main lyric dont get cut off
                 if (secFlags[nextIdx]) {
                     clusterEnd++;
+                    maxMainEndInRange = Math.max(maxMainEndInRange, originalEndMs[clusterEnd]);
                     continue;
                 }
                 LyricsLine next = lyrics.get(nextIdx);
@@ -350,12 +356,10 @@ public final class LyricsRetiming {
 
             long clusterBaseEnd = originalEndMs[i];
             for (int k = i; k <= clusterEnd; k++) {
-                if (!secFlags[k]) {
-                    clusterBaseEnd = Math.max(clusterBaseEnd, originalEndMs[k]);
-                }
+                clusterBaseEnd = Math.max(clusterBaseEnd, originalEndMs[k]);
             }
-            long clusterFinalEnd = clusterBaseEnd;
 
+            long clusterFinalEnd = clusterBaseEnd;
             if (clusterEnd + 1 < len) {
                 long nextStart = lyrics.get(clusterEnd + 1).startTimeMs();
                 long gap = nextStart - clusterBaseEnd;
@@ -373,52 +377,60 @@ public final class LyricsRetiming {
                     newEndMs[j] = originalEndMs[j];
                     continue;
                 }
+                long jEffEnd = originalEndMs[j];
+                for (int s = j + 1; s <= clusterEnd && secFlags[s]; s++) {
+                    jEffEnd = Math.max(jEffEnd, originalEndMs[s]);
+                }
                 Long cutoff = null;
-                int prevMainIdx = j;
-                // search cutoff only between main lines, secondary vocal cannot cut main lyric active life
+                long prevEffEnd = jEffEnd;
                 for (int k = j + 1; k <= clusterEnd; k++) {
                     if (secFlags[k]) {
                         continue;
                     }
-                    boolean jClearsK = (originalEndMs[j] - startMs[k] <= RETIMING_OVERLAP_THRESHOLD_MS);
-                    boolean chainBrokenAtK = (originalEndMs[prevMainIdx] - startMs[k] <= RETIMING_OVERLAP_THRESHOLD_MS);
+                    boolean jClearsK = (jEffEnd - startMs[k] <= RETIMING_OVERLAP_THRESHOLD_MS);
+                    boolean chainBrokenAtK = (prevEffEnd - startMs[k] <= RETIMING_OVERLAP_THRESHOLD_MS);
                     if (jClearsK || chainBrokenAtK) {
                         cutoff = startMs[k];
                         break;
                     }
-                    prevMainIdx = k;
+                    long kEffEnd = originalEndMs[k];
+                    for (int s = k + 1; s <= clusterEnd && secFlags[s]; s++) {
+                        kEffEnd = Math.max(kEffEnd, originalEndMs[s]);
+                    }
+                    prevEffEnd = kEffEnd;
                 }
                 newEndMs[j] = (cutoff != null) ? cutoff : clusterFinalEnd;
                 lastCompletedMainIdx = j;
             }
-
             i = clusterEnd + 1;
         }
 
         List<RetimedEntry> result = new ArrayList<>(len);
+        long[] finalAdjEnd = new long[len];
         for (int idx = 0; idx < len; idx++) {
             long candidateAdj = (Math.abs(newEndMs[idx] - originalEndMs[idx]) > RETIMING_GAP_THRESHOLD_MS)
                     ? newEndMs[idx] : originalEndMs[idx];
-            long adjEnd = Math.max(originalEndMs[idx], candidateAdj);
-            boolean idxIsSec = secFlags[idx];
-            if (!idxIsSec) {
-                // extend main lyric lifetime so it can fit its child secondary vocal until singing done
+            finalAdjEnd[idx] = Math.max(originalEndMs[idx], candidateAdj);
+        }
+        for (int idx = 0; idx < len; idx++) {
+            if (!secFlags[idx]) {
+                long mainAdj = finalAdjEnd[idx];
                 int nextMainIdx = idx + 1;
                 while (nextMainIdx < len && secFlags[nextMainIdx]) {
                     nextMainIdx++;
                 }
-                long nextMainStart = (nextMainIdx < len) ? startMs[nextMainIdx] : Long.MAX_VALUE;
-                boolean overlapsNextMain = (nextMainIdx < len)
-                        && (originalEndMs[idx] - nextMainStart > RETIMING_OVERLAP_THRESHOLD_MS);
                 for (int sIdx = idx + 1; sIdx < nextMainIdx; sIdx++) {
-                    long secEnd = originalEndMs[sIdx];
-                    if (!overlapsNextMain && nextMainStart != Long.MAX_VALUE) {
-                        secEnd = Math.min(secEnd, nextMainStart);
-                    }
-                    adjEnd = Math.max(adjEnd, secEnd);
+                    mainAdj = Math.max(mainAdj, finalAdjEnd[sIdx]);
+                }
+                finalAdjEnd[idx] = mainAdj;
+                // ponytail: secondary lines belong to parent main line, so they share the same adjusted lifetime
+                for (int sIdx = idx + 1; sIdx < nextMainIdx; sIdx++) {
+                    finalAdjEnd[sIdx] = mainAdj;
                 }
             }
-            result.add(new RetimedEntry(lyrics.get(idx), startMs[idx], originalEndMs[idx], adjEnd, idxIsSec));
+        }
+        for (int idx = 0; idx < len; idx++) {
+            result.add(new RetimedEntry(lyrics.get(idx), startMs[idx], originalEndMs[idx], finalAdjEnd[idx], secFlags[idx]));
         }
         return result;
     }
