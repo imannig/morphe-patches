@@ -1580,9 +1580,7 @@ class LyricsLineView extends TextView {
         canvas.translate(getCompoundPaddingLeft(), getExtendedPaddingTop());
 
         int baseSung = (sungColor != 0) ? sungColor : lineTextColor();
-        int dynamicLineColor = isSecondary
-                ? baseSung
-                : withAlpha(baseSung, lookCurAlpha);
+        int dynamicLineColor = withAlpha(baseSung, lookCurAlpha);
         float dynamicFocusedAlpha = lookCurFocusedAlpha;
 
         if (appleAnimator != null && cachedHasWordTimings && animationStyle != LyricsAnimationStyle.NONE) {

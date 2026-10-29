@@ -467,7 +467,8 @@ public final class LyricsManager {
                     && (now - lastPlaybackSampleUptimeMs > PLAYBACK_STALE_MS));
 
             // if seek backward or forward too far or audio sample already stale af, hard re-anchor right away
-            if (isInitial || isBackwardSeek || isForwardSeek || isStaleDrift || !playing) {
+            if (isInitial || isBackwardSeek || isForwardSeek || isStaleDrift
+                    || (!playing && Math.abs(videoTime - smoothPositionMs) > 600L)) {
                 smoothPositionMs = videoTime;
                 positionMs = videoTime;
                 positionUpdatedAtUptimeMs = now;
@@ -477,11 +478,6 @@ public final class LyricsManager {
                 positionMs = smoothPositionMs;
                 positionUpdatedAtUptimeMs = now;
             }
-        }
-
-        if (!playing && lastVideoTimeSample >= 0) {
-            smoothPositionMs = lastVideoTimeSample;
-            positionMs = lastVideoTimeSample;
         }
 
         return Math.max(0L, smoothPositionMs);
