@@ -1433,7 +1433,8 @@ public final class WordSweepAnimator {
     }
 
     private void updateColorAndSimpleStates(long currentPosition, boolean isActiveLine, boolean allSung, long nowUptimeMs) {
-        float targetCS = (!isActiveLine && !(isBackground && allSung)) ? 1f : 0f;
+        final boolean holdBackgroundLit = isBackground && allSung && Settings.LYRICS_SPLIT_BACKGROUND.get();
+        float targetCS = (!isActiveLine && !holdBackgroundLit) ? 1f : 0f;
         float targetSS = (isActiveLine && currentPosition >= lineStartTime && currentPosition <= effectiveEndTimeMs) ? 1f : 0f;
 
         if (isFirstRun || lastDrawUptimeMs < 0L) {
@@ -1699,7 +1700,8 @@ public final class WordSweepAnimator {
                 ? WordAnimationUtils.lerpColor(baseUnlitColor, pastColor, finishAlpha)
                 : baseUnlitColor;
 
-        boolean showWipe = isActiveLine || isFinishing || isDeactivatingFade || (isBackground && allSung);
+        boolean showWipe = isActiveLine || isFinishing || isDeactivatingFade
+                || (isBackground && allSung && Settings.LYRICS_SPLIT_BACKGROUND.get());
         int lineColorValue = showWipe ? Color.TRANSPARENT : lineColor;
         float simpleFrac = (currentPosition > effectiveEndTimeMs) ? 0f : Math.max(0f, Math.min(1f, curSimpleState));
         int inactiveColor = !showWipe
@@ -2081,6 +2083,7 @@ public final class WordSweepAnimator {
         int n = clusters.size();
         boolean anyGlow = false;
         boolean anyRunningAnim = isActiveLine || isFinishing || isDeactivatingFade;
+        float activeGlowFade = isActiveLine ? 1f : Math.max(0f, 1f - curColorState);
 
         for (int idx = 0; idx < n; idx++) {
             VisualCluster vc = clusters.get(idx);
@@ -2127,7 +2130,8 @@ public final class WordSweepAnimator {
                         scale = 1f + emphasisScaleGain * pulse;
                         shift = vc.normX() * emphasisShiftEm * fontSizePx * pulse;
                     }
-                    glowAlpha = Math.max(0f, Math.min(1f, vc.charShadowIntensity() * sampleScratch.glow));
+                    glowAlpha = Math.max(0f, Math.min(1f,
+                            vc.charShadowIntensity() * sampleScratch.glow * activeGlowFade));
                 }
             } else {
                 lift = elevValue;
@@ -2137,7 +2141,7 @@ public final class WordSweepAnimator {
             float baseY = restBaseY(idx, shiftProgress);
             float drawX = baseX + shift;
             float drawY = baseY + lift + rise;
-            boolean isGlowing = !disableGlowAndGrow && isGrowableWord && isEmphasised;
+            boolean isGlowing = !disableGlowAndGrow && isGrowableWord && isEmphasised && glowAlpha > 0.005f;
 
             clusterScaleX[idx] = scale;
             clusterGlowAlphas[idx] = glowAlpha;
@@ -2154,6 +2158,8 @@ public final class WordSweepAnimator {
         }
 
         if (anyGlow) {
+            ColorFilter glowFilter = (maskCache != null)
+                    ? maskCache.glowTint.get(pastColor | 0xFF000000) : null;
             for (int idx = 0; idx < n; idx++) {
                 if (clusterIsGlowing[idx]) {
                     float glowAlpha = clusterGlowAlphas[idx];
@@ -2165,7 +2171,8 @@ public final class WordSweepAnimator {
                     float tx = drawX + extraPaddingPx;
                     float ty = drawY + extraPaddingPx;
 
-                    Bitmap glowMask = (maskCache != null) ? maskCache.obtainGlow(idx, vc.subLayout(), glowBlurRadius) : null;
+                    Bitmap glowMask = (maskCache != null && glowFilter != null)
+                            ? maskCache.obtainGlow(idx, vc.subLayout(), glowBlurRadius) : null;
                     if (glowMask != null) {
                         canvas.save();
                         canvas.translate(tx, ty);
@@ -2176,7 +2183,7 @@ public final class WordSweepAnimator {
                                 canvas,
                                 glowMask,
                                 maskCache.glowScaleOf(idx),
-                                maskCache.glowFilter,
+                                glowFilter,
                                 glowAlpha,
                                 true);
                         canvas.restore();
